@@ -9,8 +9,7 @@ static const int EXPECTED_NUMBER_OF_ARGUMENTS = 5;
 static const int ARG_N_IDX = 1, ARG_M_IDX = 2, ARG_GENOME_IN_IDX = 3,
                  ARG_QUERIES_IN_IDX = 4, ARG_QUERIES_OUT_IDX = 5;
 
-std::tuple<const int, const int, char *, std::string, std::string> parse_args(
-    int &argc, char *argv[]) {
+auto parse_args(int &argc, char **(&argv)) {
     if (argc < 1 + EXPECTED_NUMBER_OF_ARGUMENTS) {
         std::cerr << "Expected at least " << EXPECTED_NUMBER_OF_ARGUMENTS
                   << " parameters in the following format:"
@@ -22,14 +21,17 @@ std::tuple<const int, const int, char *, std::string, std::string> parse_args(
         exit(1);
     }
 
-    char **original_argv = argv;
+    const auto n = std::stoi(argv[ARG_N_IDX]);
+    const auto m = std::stoi(argv[ARG_M_IDX]);
+    const auto genome_in = argv[ARG_GENOME_IN_IDX];
+    const auto queries_in = std::string(argv[ARG_QUERIES_IN_IDX]);
+    const auto queries_out = std::string(argv[ARG_QUERIES_OUT_IDX]);
+
+    argv[EXPECTED_NUMBER_OF_ARGUMENTS] = argv[0];
     argv += EXPECTED_NUMBER_OF_ARGUMENTS;
-    argv[0] = original_argv[0];
     argc -= EXPECTED_NUMBER_OF_ARGUMENTS;
 
-    return std::make_tuple(
-        std::stoi(original_argv[ARG_N_IDX]),
-        std::stoi(original_argv[ARG_M_IDX]), original_argv[ARG_GENOME_IN_IDX],
-        original_argv[ARG_QUERIES_IN_IDX], original_argv[ARG_QUERIES_OUT_IDX]);
+    return std::make_tuple(n, m, genome_in, queries_in, queries_out);
 }
+
 #endif /* PARAMS_H */
