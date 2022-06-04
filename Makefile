@@ -20,3 +20,6 @@ data_source.o : src/data_source.cpp src/data_source.h Makefile
 
 clean:
 	rm -f src/*.o *.o genome_index
+
+report.pdf: report.md
+	pandoc $^ -o $@
