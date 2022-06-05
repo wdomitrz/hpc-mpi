@@ -13,13 +13,10 @@ using std::vector, std::pair;
 
 #define SA(i) (B[i].second)
 
-const size_t byte_size = 8;
-const size_t char_size = 4;  // There are 4 characters -- A, C, T, G and one
+const size_t char_size = 3;  // There are 4 characters -- A, C, T, G and one
                              // special character -- the end of the word
-template <typename WordType>
-static const size_t k = 1;
-template <typename WordType>
-inline const WordType char_to_word(char c) {
+static const size_t k = (64 - char_size) / char_size;
+static inline uint64_t char_to_word(char c) {
     switch (c) {
         case 'A':
             return 1;
@@ -61,7 +58,7 @@ inline bool rebucket_and_check_all_singleton(
 
 inline void printB(
     const std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> &B,
-    char *buffer) {
+    const char *buffer) {
     for (uint64_t i = 0; i < B.size(); i++) {
         std::cerr << B[i].first.first << " ";
         if (B[i].second >= 10 && B[i].first.first < 10) std::cerr << " ";
@@ -92,7 +89,7 @@ const std::vector<uint64_t> sa_word_size_param(
         genome_size != my_genome_part_size || my_genome_offset != 0)
         non_seq_fail();
 
-    std::string buffer(my_genome_part_size + k<uint64_t>, 0);
+    std::string buffer(my_genome_part_size, 0);
     std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> B(
         my_genome_part_size);
     std::vector<uint64_t> B_prim(my_genome_part_size);
@@ -102,22 +99,23 @@ const std::vector<uint64_t> sa_word_size_param(
     // Create B with k-mers
     uint64_t M = 1;
     uint64_t current_value = 0;
-    for (uint64_t i = 0; i < k<uint64_t>; i++) {
+    for (uint64_t i = 0; i < k; i++) {
         current_value *= (1 << char_size);
-        current_value += char_to_word<uint64_t>(buffer[i]);
-        if (i != 0) M *= (1 << char_size);
+        if (i < buffer.size()) current_value += char_to_word(buffer[i]);
+        if (i > 0) M *= (1 << char_size);
+        // std::cerr << M << std::endl;
     }
     for (size_t i = 0; i < std::min(my_genome_part_size, B.size()); i++) {
         B[i] = std::make_pair(std::make_pair(current_value, 0), i);
         current_value %= M;
         current_value *= (1 << char_size);
-        current_value += char_to_word<uint64_t>(buffer[i + k<uint64_t>]);
+        if (i + k < buffer.size()) current_value += char_to_word(buffer[i + k]);
     }
 
     // Create SA
     std::sort(B.begin(), B.end());
     bool done = rebucket_and_check_all_singleton(B);
-    for (size_t h = k<uint64_t>;; h *= 2) {
+    for (uint64_t h = k;; h <<= 1) {
         for (uint64_t i = 0; i < my_genome_part_size; i++) {
             B_prim[B[i].second] = B[i].first.first;
         }
@@ -128,7 +126,7 @@ const std::vector<uint64_t> sa_word_size_param(
             break;
         }
         for (uint64_t i = 0; i < my_genome_part_size; i++) {
-            if (i + h < my_genome_part_size)
+            if (i + h < B.size())
                 B[i].first.second = B[i + h].first.first;
             else
                 B[i].first.second = 0;
