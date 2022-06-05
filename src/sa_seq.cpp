@@ -17,7 +17,7 @@ const size_t byte_size = 8;
 const size_t char_size = 4;  // There are 4 characters -- A, C, T, G and one
                              // special character -- the end of the word
 template <typename WordType>
-const size_t k = sizeof(WordType) * byte_size - char_size;
+static const size_t k = sizeof(WordType) * byte_size - char_size;
 template <typename WordType>
 inline const WordType char_to_word(char c) {
     switch (c) {
@@ -59,9 +59,8 @@ inline bool rebucket_and_check_all_singleton(
 }
 
 const std::vector<uint64_t> sa_word_size_param(
-    int my_rank, int number_of_processes, int which, uint64_t n, uint64_t m,
-    DataSource &data_source, const std::string &queries_in,
-    const std::string &queries_out, std::vector<std::string> queries) {
+    int my_rank, int number_of_processes, int which, DataSource &data_source,
+    std::vector<std::string> queries) {
     const uint64_t genome_size = data_source.getTotalGenomeSize(which),
                    my_genome_part_size = data_source.getNodeGenomeSize(which),
                    my_genome_offset = data_source.getNodeGenomeSize(which);
@@ -70,11 +69,11 @@ const std::vector<uint64_t> sa_word_size_param(
         genome_size != my_genome_part_size || my_genome_offset != 0)
         non_seq_fail();
 
-    char buffer[my_genome_part_size + k<uint64_t>];
+    std::string buffer(my_genome_part_size + k<uint64_t>, 0);
     std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> B;
     std::vector<uint64_t> B_prim;
 
-    data_source.getNodeGenomeValues(which, buffer);
+    data_source.getNodeGenomeValues(which, buffer.data());
 
     // Create B with k-mers
     uint64_t current_value = 0;
@@ -111,15 +110,15 @@ const std::vector<uint64_t> sa_word_size_param(
 
     // Answer the queries
     std::vector<uint64_t> res(queries.size());
-    for (uint64_t i = 0; i < n; i++) {
+    for (uint64_t i = 0; i < queries.size(); i++) {
         uint64_t first_occurrence, last_occurrence;
         // find first occurrence
         {
             uint64_t b = 0, e = B.size() + 1, m;
             while (b < e + 1) {
                 m = (b + e) / 2;
-                if (strcmp(queries[i].c_str(), &buffer[B[m].second]) >
-                    0) {  // queries[i] > &buffer[B[m].second]
+                if (strcmp(queries[i].c_str(), &buffer.c_str()[B[m].second]) >
+                    0) {  // queries[i] > &buffer.c_str()[B[m].second]
                     b = m;
                 } else {
                     e = m;
@@ -160,15 +159,14 @@ void sa(int my_rank, int number_of_processes, uint64_t n, uint64_t m,
     // Compute SA and answer the queries
     std::vector<std::vector<uint64_t>> res(n);
     for (uint64_t i = 0; i < n; i++) {
-        res[i] =
-            sa_word_size_param(my_rank, number_of_processes, i, n, m,
-                               data_source, queries_in, queries_out, queries);
+        res[i] = sa_word_size_param(my_rank, number_of_processes, (int)i,
+                                    data_source, queries);
     }
 
     // Write the results to a file
     {
         std::ofstream queries_out_file(queries_out);
-        for (int j = 0; j < m; j++) {
+        for (uint64_t j = 0; j < m; j++) {
             for (uint64_t i = 0; i < n; i++) {
                 queries_out_file << res[i][j] << " ";
             }

@@ -1,3 +1,4 @@
-*.o
 genome_index
+genome_index_seq
+*.o
 .vscode
