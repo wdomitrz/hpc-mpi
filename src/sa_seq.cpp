@@ -1,5 +1,3 @@
-#include "sa_seq.hpp"
-
 #include <mpi.h>
 
 #include <algorithm>
@@ -9,6 +7,7 @@
 #include <vector>
 
 #include "data_source.h"
+#include "sa.hpp"
 using std::vector, std::pair;
 
 #define SA(i) (B[i].second)

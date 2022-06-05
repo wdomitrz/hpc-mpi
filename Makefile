@@ -9,10 +9,10 @@ LINKER_OPTIONS := $(WARNING_OPTIONS) $(WEAK_LINKER_OPTIONS)
 WEAK_COMPILTER_OPTIONS := $(WEAK_LINKER_OPTIONS) -c
 COMPILTER_OPTIONS := $(LINKER_OPTIONS) -c
 
-genome_index: src/main.cpp src/params.hpp data_source.o
+genome_index: src/main.cpp src/params.hpp data_source.o src/sa.cpp src/sa.hpp src/data_source.h
 	$(CC) $(LINKER_OPTIONS) -o $@ $^
 
-genome_index_seq: src/main_seq.cpp src/params.hpp data_source.o src/sa_seq.cpp src/sa_seq.hpp src/data_source.h
+genome_index_seq: src/main.cpp src/params.hpp data_source.o src/sa_seq.cpp src/sa.hpp src/data_source.h
 	$(CC) $(LINKER_OPTIONS) -o $@ $^
 
 data_source.o : src/data_source.cpp src/data_source.h Makefile
