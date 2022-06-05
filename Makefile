@@ -12,14 +12,11 @@ COMPILTER_OPTIONS := $(LINKER_OPTIONS) -c
 genome_index: src/main.cpp src/params.hpp data_source.o
 	$(CC) $(LINKER_OPTIONS) -o $@ $^
 
-genome_index_seq: src/main_seq.cpp src/params.hpp data_source.o sa_seq.o
+genome_index_seq: src/main_seq.cpp src/params.hpp data_source.o src/sa_seq.cpp src/sa_seq.hpp src/data_source.h
 	$(CC) $(LINKER_OPTIONS) -o $@ $^
 
 data_source.o : src/data_source.cpp src/data_source.h Makefile
 	$(CC) $(WEAK_COMPILTER_OPTIONS) $<
-
-%.o : src/%.cpp src/%.hpp src/data_source.h Makefile
-	$(CC) $(COMPILTER_OPTIONS) $<
 
 clean:
 	rm -f src/*.o *.o genome_index genome_index_seq

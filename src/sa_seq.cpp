@@ -17,7 +17,7 @@ const size_t byte_size = 8;
 const size_t char_size = 4;  // There are 4 characters -- A, C, T, G and one
                              // special character -- the end of the word
 template <typename WordType>
-static const size_t k = sizeof(WordType) * byte_size - char_size;
+static const size_t k = 1;
 template <typename WordType>
 inline const WordType char_to_word(char c) {
     switch (c) {
@@ -45,12 +45,13 @@ inline bool rebucket_and_check_all_singleton(
     std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> &B) {
     bool res = true;
     std::pair<uint64_t, uint64_t> last_val = B[0].first;
-    uint64_t g = 0;
+    uint64_t g = 1;
     B[0].first = std::make_pair(g, 0);
     for (size_t i = 1; i < B.size(); i++) {
         if (last_val == B[i].first) {
             res = false;
         } else {
+            last_val = B[i].first;
             g++;
         }
         B[i].first = std::make_pair(g, 0);
@@ -58,39 +59,65 @@ inline bool rebucket_and_check_all_singleton(
     return res;
 }
 
+inline void printB(
+    const std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> &B,
+    char *buffer) {
+    for (uint64_t i = 0; i < B.size(); i++) {
+        std::cerr << B[i].first.first << " ";
+        if (B[i].second >= 10 && B[i].first.first < 10) std::cerr << " ";
+    }
+    std::cerr << std::endl;
+    for (uint64_t i = 0; i < B.size(); i++) {
+        std::cerr << B[i].first.second << " ";
+        if (B[i].second >= 10 && B[i].first.second < 10) std::cerr << " ";
+    }
+    std::cerr << std::endl;
+    for (uint64_t i = 0; i < B.size(); i++) std::cerr << B[i].second << " ";
+    std::cerr << std::endl << std::endl;
+
+    for (uint64_t i = 0; i < B.size(); i++) {
+        std::cerr << &buffer[B[i].second] << std::endl;
+    }
+    std::cerr << std::endl << std::endl;
+}
+
 const std::vector<uint64_t> sa_word_size_param(
     int my_rank, int number_of_processes, int which, DataSource &data_source,
     std::vector<std::string> queries) {
     const uint64_t genome_size = data_source.getTotalGenomeSize(which),
                    my_genome_part_size = data_source.getNodeGenomeSize(which),
-                   my_genome_offset = data_source.getNodeGenomeSize(which);
+                   my_genome_offset = data_source.getNodeGenomeOffset(which);
 
     if (number_of_processes != 1 || my_rank != 0 ||
         genome_size != my_genome_part_size || my_genome_offset != 0)
         non_seq_fail();
 
     std::string buffer(my_genome_part_size + k<uint64_t>, 0);
-    std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> B;
-    std::vector<uint64_t> B_prim;
+    std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> B(
+        my_genome_part_size);
+    std::vector<uint64_t> B_prim(my_genome_part_size);
 
     data_source.getNodeGenomeValues(which, buffer.data());
 
     // Create B with k-mers
+    uint64_t M = 1;
     uint64_t current_value = 0;
-    for (size_t i = 0; i < k<uint64_t>; i++) {
+    for (uint64_t i = 0; i < k<uint64_t>; i++) {
         current_value *= (1 << char_size);
         current_value += char_to_word<uint64_t>(buffer[i]);
+        if (i != 0) M *= (1 << char_size);
     }
-    for (size_t i = 0; i < my_genome_part_size; i++) {
+    for (size_t i = 0; i < std::min(my_genome_part_size, B.size()); i++) {
         B[i] = std::make_pair(std::make_pair(current_value, 0), i);
+        current_value %= M;
         current_value *= (1 << char_size);
-        current_value += char_to_word<uint64_t>(buffer[i]);
+        current_value += char_to_word<uint64_t>(buffer[i + k<uint64_t>]);
     }
 
     // Create SA
     std::sort(B.begin(), B.end());
     bool done = rebucket_and_check_all_singleton(B);
-    for (size_t h = k<uint64_t>;; h += k<uint64_t>) {
+    for (size_t h = k<uint64_t>;; h *= 2) {
         for (uint64_t i = 0; i < my_genome_part_size; i++) {
             B_prim[B[i].second] = B[i].first.first;
         }
@@ -101,47 +128,50 @@ const std::vector<uint64_t> sa_word_size_param(
             break;
         }
         for (uint64_t i = 0; i < my_genome_part_size; i++) {
-            B[i].first.second = B[i + h].first.first;
+            if (i + h < my_genome_part_size)
+                B[i].first.second = B[i + h].first.first;
+            else
+                B[i].first.second = 0;
+            B[i].second = i;
         }
         std::sort(B.begin(), B.end());
-
         done = rebucket_and_check_all_singleton(B);
     }
 
     // Answer the queries
     std::vector<uint64_t> res(queries.size());
     for (uint64_t i = 0; i < queries.size(); i++) {
-        uint64_t first_occurrence, last_occurrence;
+        uint64_t first_occurrence, after_last_occurrence;
         // find first occurrence
         {
-            uint64_t b = 0, e = B.size() + 1, m;
-            while (b < e + 1) {
+            uint64_t b = 0, e = B.size(), m;
+            while (b < e) {
                 m = (b + e) / 2;
                 if (strcmp(queries[i].c_str(), &buffer.c_str()[B[m].second]) >
                     0) {  // queries[i] > &buffer.c_str()[B[m].second]
-                    b = m;
+                    b = m + 1;
                 } else {
                     e = m;
                 }
             }
-            first_occurrence = e;
+            first_occurrence = b;
         }
         queries[i][queries[i].size() - 1]++;
-        // find last occurrence
         {
-            uint64_t b = 0, e = B.size() + 1, m;
-            while (b < e + 1) {
+            uint64_t b = 0, e = B.size(), m;
+            while (b < e) {
                 m = (b + e) / 2;
-                if (strcmp(queries[i].c_str(), &buffer[B[m].second]) >
-                    0) {  // queries[i] > &buffer[B[m].second]
-                    b = m;
+                if (strcmp(queries[i].c_str(), &buffer.c_str()[B[m].second]) >
+                    0) {  // queries[i] > &buffer.c_str()[B[m].second]
+                    b = m + 1;
                 } else {
                     e = m;
                 }
             }
-            last_occurrence = e;
+            after_last_occurrence = b;
         }
-        res[i] = last_occurrence - first_occurrence;
+        queries[i][queries[i].size() - 1]--;
+        res[i] = after_last_occurrence - first_occurrence;
     }
     return res;
 }
