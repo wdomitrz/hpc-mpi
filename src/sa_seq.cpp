@@ -196,7 +196,8 @@ void sa(int my_rank, int number_of_processes, uint64_t n, uint64_t m,
         std::ofstream queries_out_file(queries_out);
         for (uint64_t j = 0; j < m; j++) {
             for (uint64_t i = 0; i < n; i++) {
-                queries_out_file << res[i][j] << " ";
+                if (i > 0) queries_out_file << " ";
+                queries_out_file << res[i][j];
             }
             queries_out_file << "\n";
         }
