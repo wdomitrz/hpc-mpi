@@ -12,6 +12,9 @@ COMPILTER_OPTIONS := $(LINKER_OPTIONS) -c
 genome_index: src/main.cpp src/params.hpp src/data_source.h data_source.o
 	$(CC) $(LINKER_OPTIONS) -o $@ $^
 
+genome_index_seq: src/main_seq.cpp src/params.hpp src/data_source.h data_source.o
+	$(CC) $(LINKER_OPTIONS) -o $@ $^
+
 data_source.o : src/data_source.cpp src/data_source.h Makefile
 	$(CC) $(WEAK_COMPILTER_OPTIONS) $<
 
