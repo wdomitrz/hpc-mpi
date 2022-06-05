@@ -1,2 +1,3 @@
 *.o
 genome_index
+.vscode
