@@ -18,11 +18,11 @@ genome_index_seq: src/main_seq.cpp src/params.hpp data_source.o sa_seq.o
 data_source.o : src/data_source.cpp src/data_source.h Makefile
 	$(CC) $(WEAK_COMPILTER_OPTIONS) $<
 
-%.o : %.cpp src/%.hpp src/data_source.h Makefile
+%.o : src/%.cpp src/%.hpp src/data_source.h Makefile
 	$(CC) $(COMPILTER_OPTIONS) $<
 
 clean:
-	rm -f src/*.o *.o genome_index
+	rm -f src/*.o *.o genome_index genome_index_seq
 
 report.pdf: report.md
 	pandoc $^ -o $@
