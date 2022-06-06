@@ -167,7 +167,7 @@ inline void my_sort_params(
     if (end <= begin) return;
     assert(begin == 0 && end == genome_size);
 
-    std::srand(std::time(nullptr));
+    std::srand(static_cast<unsigned int>(std::time(nullptr)));
     std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> pivots(
         number_of_processes);
 
@@ -193,10 +193,11 @@ inline void my_sort_params(
         to_send_to[current_receiver].push_back(i);
     }
 
+    ok();
     send_offsets[0] = 0;
-    send_counts[0] = to_send_to[0].size() * TUPLE_SIZE;
-    for (uint64_t i = 1; i < number_of_processes; i++) {
-        send_counts[i] = to_send_to[i].size() * TUPLE_SIZE;
+    send_counts[0] = static_cast<int>(TUPLE_SIZE * to_send_to[0].size());
+    for (int i = 1; i < number_of_processes; i++) {
+        send_counts[i] = static_cast<int>(to_send_to[i].size() * TUPLE_SIZE);
         send_offsets[i] = send_offsets[i - 1] + send_counts[i - 1];
     }
 
@@ -204,13 +205,15 @@ inline void my_sort_params(
                  MPI_COMM_WORLD);
 
     recv_offsets[0] = 0;
-    for (uint64_t i = 1; i < number_of_processes; i++) {
+    for (int i = 1; i < number_of_processes; i++) {
         recv_offsets[i] = recv_offsets[i - 1] + recv_counts[i - 1];
     }
 
     uint64_t my_temp_size = recv_offsets[number_of_processes - 1] +
                             recv_counts[number_of_processes - 1],
              my_temp_offset;
+
+    my_temp_size /= TUPLE_SIZE;
 
     std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> temp_B(
         my_temp_size);
@@ -224,7 +227,29 @@ inline void my_sort_params(
     MPI_Iexscan(&my_temp_size, &my_temp_offset, 1, MPI_UINT64_T, MPI_SUM,
                 MPI_COMM_WORLD, &temp_offset_request);
     std::sort(temp_B.begin(), temp_B.end());
+    std::fill(send_counts.begin(), send_counts.end(), 0);
+    std::fill(send_offsets.begin(), send_offsets.end(), 0);
+
     MPI_Wait(&temp_offset_request, &global_status);
+    if (my_rank == 0) {
+        my_temp_offset = 1;
+    }
+
+    for (int i = whose(my_temp_offset);
+         i <= whose(my_temp_offset + my_temp_size - 1); i++) {
+        send_counts[i] = static_cast<int>(std::min(
+            my_temp_size, how_much_x_has(i) + offset(i) - my_temp_offset));
+        my_temp_size -= send_counts[i];
+        send_counts[i] *= TUPLE_SIZE;
+        if (i > 0) send_offsets[i] = send_offsets[i - 1] + send_counts[i - 1];
+    }
+
+    MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(), 1, MPI_INT,
+                 MPI_COMM_WORLD);
+
+    MPI_Alltoallv(temp_B.data(), send_counts.data(), send_offsets.data(),
+                  MPI_UINT64_T, B.data(), recv_counts.data(),
+                  recv_offsets.data(), MPI_UINT64_T, MPI_COMM_WORLD);
 }
 
 inline void printB_fun(
@@ -403,7 +428,7 @@ const std::vector<uint64_t> sa_word_size_param(
     }
 
     // Create SA
-    my_sort(B);  // sorting
+    my_sort_full(B);  // sorting
 
     bool done = rebucket_and_check_all_singleton(
         my_rank, number_of_processes, genome_size, my_genome_part_size,
@@ -519,7 +544,7 @@ const std::vector<uint64_t> sa_word_size_param(
             } else
                 B[i].first.second = 0;
         }
-        my_sort(B);
+        my_sort_full(B);
         done = rebucket_and_check_all_singleton(
             my_rank, number_of_processes, genome_size, my_genome_part_size,
             my_genome_offset, B);
