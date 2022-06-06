@@ -352,21 +352,6 @@ const std::vector<uint64_t> sa_word_size_param(
             my_genome_offset, B);
     }
 
-    if (which == 2) {
-        for (int r = 0; r < number_of_processes; r++) {
-            MPI_Barrier(MPI_COMM_WORLD);
-            if (my_rank == r) {
-                for (size_t i = 0; i < my_genome_part_size; i++) {
-                    std::cerr << B[i].second << " ";
-                }
-            }
-            MPI_Barrier(MPI_COMM_WORLD);
-        }
-        MPI_Barrier(MPI_COMM_WORLD);
-        if (my_rank == 0) std::cerr << std::endl;
-        MPI_Barrier(MPI_COMM_WORLD);
-    }
-
     // TODO send borders
     // Answer the queries
     std::vector<uint64_t> res(queries.size());
