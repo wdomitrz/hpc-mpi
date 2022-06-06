@@ -181,7 +181,7 @@ uint64_t my_lower_bound(
     const std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> &B,
     const std::string &buffer) {
     std::vector<uint64_t> last_values(number_of_processes);
-    std::vector<uint16_t> is_greater_or_equal(number_of_processes, false);
+    std::vector<int8_t> is_greater_or_equal(number_of_processes, false);
     MPI_Allgather(&B[my_genome_part_size - 1].second, 1, MPI_UINT64_T,
                   last_values.data(), 1, MPI_UINT64_T, MPI_COMM_WORLD);
 
@@ -189,10 +189,11 @@ uint64_t my_lower_bound(
         if (my_genome_offset <= last_values[i] &&
             last_values[i] < my_genome_offset + my_genome_part_size)
             is_greater_or_equal[i] =
-                strcmp(query.c_str(), &buffer.c_str()[last_values[i]]) <= 0;
+                strcmp(query.c_str(),
+                       &buffer.c_str()[last_values[i] - my_genome_offset]) <= 0;
     }
     MPI_Allreduce(MPI_IN_PLACE, is_greater_or_equal.data(), number_of_processes,
-                  MPI_UINT16_T, MPI_LOR, MPI_COMM_WORLD);
+                  MPI_C_BOOL, MPI_LOR, MPI_COMM_WORLD);
 
     int found_rank = 0;
     while (found_rank < number_of_processes &&
@@ -203,7 +204,7 @@ uint64_t my_lower_bound(
 
     uint64_t size_of_found = how_much_x_has(found_rank);
     std::vector<uint64_t> SA(size_of_found);
-    std::vector<uint16_t> is_here(size_of_found, false);
+    std::vector<int8_t> is_here(size_of_found, false);
     if (my_rank == found_rank) {
         for (uint64_t i = 0; i < SA.size(); i++) {
             SA[i] = B[i].second;
@@ -218,10 +219,11 @@ uint64_t my_lower_bound(
     for (size_t i = 0; i < SA.size(); i++) {
         if (my_genome_offset <= SA[i] &&
             SA[i] < my_genome_offset + my_genome_part_size)
-            is_here[i] = strcmp(query.c_str(), &buffer.c_str()[SA[i]]) <= 0;
+            is_here[i] = strcmp(query.c_str(),
+                                &buffer.c_str()[SA[i] - my_genome_offset]) <= 0;
     }
 
-    MPI_Allreduce(MPI_IN_PLACE, is_here.data(), (int)SA.size(), MPI_UINT8_T,
+    MPI_Allreduce(MPI_IN_PLACE, is_here.data(), (int)is_here.size(), MPI_C_BOOL,
                   MPI_LOR, MPI_COMM_WORLD);
 
     uint64_t pos = 0;
@@ -414,7 +416,6 @@ const std::vector<uint64_t> sa_word_size_param(
             my_genome_offset, B);
     }
 
-    // TODO: send string
     // Answer the queries
     std::vector<uint64_t> res(queries.size());
 
