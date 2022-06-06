@@ -591,22 +591,18 @@ const std::vector<uint64_t> sa_word_size_param(
 
     for (uint64_t i = 0; i < queries.size(); i++) {
         // find first occurrence
-        const uint64_t first_occurrence = my_lower_bound_old(
+        const uint64_t first_occurrence = my_lower_bound(
             my_rank, number_of_processes, genome_size, my_genome_part_size,
             my_genome_offset, queries[i], B, buffer);
 
         // find position after last occurrence
         queries[i][queries[i].size() - 1]++;
-        const uint64_t after_last_occurrence = my_lower_bound_old(
+        const uint64_t after_last_occurrence = my_lower_bound(
             my_rank, number_of_processes, genome_size, my_genome_part_size,
             my_genome_offset, queries[i], B, buffer);
         queries[i][queries[i].size() - 1]--;
 
         res[i] = after_last_occurrence - first_occurrence;
-        if (my_rank == 0) {
-            std::cerr << queries[i] << " " << after_last_occurrence << " "
-                      << first_occurrence << std::endl;
-        }
     }
     return res;
 }
