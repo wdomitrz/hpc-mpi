@@ -14,7 +14,7 @@ using std::vector, std::pair;
 
 #define K_VAL (std::min(k_max, genome_size / number_of_processes))
 
-#define whose(rank) (rank * genome_size / number_of_processes)
+#define whose(rank) (rank * number_of_processes / genome_size)
 #define how_much_x_has(rank) \
     (how_much_node_has(rank, number_of_processes, genome_size))
 #define offset(rank) \
@@ -22,7 +22,11 @@ using std::vector, std::pair;
 #define my_sort(B)                                             \
     (my_sort_params(my_rank, number_of_processes, genome_size, \
                     my_genome_part_size, B))
+#define printB() printB_fun(B, buffer.c_str(), my_genome_part_size)
+#define ok() \
+    { std::cerr << "ok:\t" << my_rank << "\t" << __LINE__ << std::endl; }
 
+MPI_Request global_request;
 const size_t char_size = 3;  // There are 4 characters -- A, C, T, G and one
                              // special character -- the end of the word
 static const size_t k_max = (64 - char_size) / char_size;
@@ -61,8 +65,8 @@ inline bool rebucket_and_check_all_singleton(
 
     if (my_rank > 0)
         MPI_Isend(&B[0], sizeof(B[0]), MPI_BYTE, my_rank - 1, 0, MPI_COMM_WORLD,
-                  nullptr);  // Instead of creating a custom MPI type, I
-                             // use MPI_BYTE and send data as bytes.
+                  &global_request);  // Instead of creating a custom MPI type, I
+                                     // use MPI_BYTE and send data as bytes.
 
     MPI_Request get_next_one_request;
     if (my_rank < number_of_processes - 1)
@@ -72,35 +76,38 @@ inline bool rebucket_and_check_all_singleton(
             &get_next_one_request);  // Instead of creating a custom MPI type, I
                                      // use MPI_BYTE and send data as bytes.
 
-    for (size_t i = 0; i < my_genome_part_size - 1; i++) {
-        if (B[i].first == B[i + 1].first) {
+    uint64_t my_count = 0;
+    std::pair<uint64_t, uint64_t> prev_val = B[0].first;
+    B[0].first = std::make_pair(0, 0);
+    for (size_t i = 1; i < my_genome_part_size; i++) {
+        if (prev_val == B[i].first) {
+            B[i].first = B[i - 1].first;
             my_res = false;
-            my_partial_results[i] = 0;
         } else {
-            my_partial_results[i] = 1;
+            B[i].first = B[i - 1].first;
+            B[i].first.first++;
+            my_count++;
         }
     }
 
-    size_t i = my_genome_part_size - 1;
-    if (my_rank + 1 == number_of_processes) {
-        my_partial_results[i] = 0;
-    } else {
+    if (my_rank + 1 != number_of_processes) {
         MPI_Wait(&get_next_one_request, nullptr);
-        if (B[i].first == B[i + 1].first) {
+        if (prev_val == B[my_genome_part_size].first) {
             my_res = false;
-            my_partial_results[i] = 0;
         } else {
-            my_partial_results[i] = 1;
+            my_count++;
         }
     }
 
     MPI_Allreduce(MPI_IN_PLACE, &my_res, 1, MPI_C_BOOL, MPI_LAND,
                   MPI_COMM_WORLD);
-    MPI_Exscan(MPI_IN_PLACE, my_partial_results.data(),
-               (int)my_genome_part_size, MPI_UINT64_T, MPI_SUM, MPI_COMM_WORLD);
-    for (size_t i = 0; i < my_genome_part_size; i++) {
-        B[i].first.first = my_partial_results[i];
-    }
+    MPI_Exscan(MPI_IN_PLACE, &my_count, 1, MPI_UINT64_T, MPI_SUM,
+               MPI_COMM_WORLD);
+
+    if (my_rank != 0)
+        for (size_t i = 0; i < my_genome_part_size; i++)
+            B[i].first.first += my_count;
+
     return my_res;
 }
 
@@ -143,26 +150,25 @@ inline void my_sort_params(
     }
 }
 
-inline void printB(
+inline void printB_fun(
     const std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> &B,
-    const char *buffer) {
-    for (uint64_t i = 0; i < B.size(); i++) {
+    const char *, uint64_t genome_size) {
+    for (uint64_t i = 0; i < genome_size; i++) {
         std::cerr << B[i].first.first << " ";
         if (B[i].second >= 10 && B[i].first.first < 10) std::cerr << " ";
     }
     std::cerr << std::endl;
-    for (uint64_t i = 0; i < B.size(); i++) {
+    for (uint64_t i = 0; i < genome_size; i++) {
         std::cerr << B[i].first.second << " ";
         if (B[i].second >= 10 && B[i].first.second < 10) std::cerr << " ";
     }
     std::cerr << std::endl;
-    for (uint64_t i = 0; i < B.size(); i++) std::cerr << B[i].second << " ";
-    std::cerr << std::endl << std::endl;
+    for (uint64_t i = 0; i < genome_size; i++) std::cerr << B[i].second << " ";
+    // std::cerr << std::endl << std::endl;
 
-    for (uint64_t i = 0; i < B.size(); i++) {
-        std::cerr << &buffer[B[i].second] << std::endl;
-    }
-    std::cerr << std::endl << std::endl;
+    // for (uint64_t i = 0; i < genome_size; i++) {
+    //     std::cerr << &buffer[B[i].second] << std::endl;
+    // }
 }
 
 const std::vector<uint64_t> sa_word_size_param(
@@ -172,12 +178,15 @@ const std::vector<uint64_t> sa_word_size_param(
                    my_genome_part_size = data_source.getNodeGenomeSize(which),
                    my_genome_offset = data_source.getNodeGenomeOffset(which);
 
-    std::vector<int> send_counts(number_of_processes);
-    std::vector<int> send_offsets(number_of_processes);
+    std::vector<int> send_counts(number_of_processes),
+        recv_counts(number_of_processes), send_offsets(number_of_processes),
+        recv_offsets(number_of_processes);
     std::string buffer(my_genome_part_size + K_VAL, 0);
     std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> B(
         my_genome_part_size + 1);
-    std::vector<std::pair<uint64_t, uint64_t>> B_prim(my_genome_part_size);
+    std::vector<std::pair<uint64_t, uint64_t>> B_prim_source(
+        my_genome_part_size),
+        B_prim(my_genome_part_size);
     std::vector<uint64_t> B_plus_h(my_genome_part_size),
         B_helper(my_genome_part_size);
 
@@ -185,12 +194,12 @@ const std::vector<uint64_t> sa_word_size_param(
 
     // Create B with K_VAL-mers
 
-    // Send my K_VAL first elements to the previous node and get K_VAL next from
-    // the next node.
-    // We choose K_VAL, such that it fits onto every node
+    // Send my K_VAL first elements to the previous node and get K_VAL next
+    // from the next node. We choose K_VAL, such that it fits onto every
+    // node
     if (my_rank > 0)
         MPI_Isend(buffer.c_str(), (int)K_VAL, MPI_CHAR, my_rank - 1, 0,
-                  MPI_COMM_WORLD, nullptr);
+                  MPI_COMM_WORLD, &global_request);
     MPI_Request get_k_request;
     if (my_rank < number_of_processes - 1)
         MPI_Irecv(&buffer.data()[my_genome_part_size], (int)K_VAL, MPI_CHAR,
@@ -207,11 +216,11 @@ const std::vector<uint64_t> sa_word_size_param(
             current_value += char_to_word(buffer[i]);
         }
         if (i > 0) M *= (1 << char_size);
-        // std::cerr << M << std::endl;
     }
 
     for (size_t i = 0; i < my_genome_part_size; i++) {
-        B[i] = std::make_pair(std::make_pair(current_value, 0), i);
+        B[i] = std::make_pair(std::make_pair(current_value, 0),
+                              my_genome_offset + i);
         current_value %= M;
         current_value *= (1 << char_size);
         const size_t j = i + K_VAL;
@@ -223,41 +232,47 @@ const std::vector<uint64_t> sa_word_size_param(
     }
 
     // Create SA
-    my_sort(B);  // TODO sorting
-    std::cerr << "ok: " << __LINE__ << std::endl;
+    my_sort(B);  // sorting
 
     bool done = rebucket_and_check_all_singleton(
         my_rank, number_of_processes, genome_size, my_genome_part_size,
         my_genome_offset, B);
 
-    std::cerr << "ok: " << __LINE__ << std::endl;
     for (uint64_t h = K_VAL;; h <<= 1) {
         std::vector<std::vector<std::pair<uint64_t, uint64_t>>> to_send_to(
             number_of_processes);
         for (uint64_t i = 0; i < my_genome_part_size; i++) {
-            to_send_to[whose(B[i].second)].emplace_back(B[i].second,
-                                                        B[i].first.first);
+            const int to = (int)whose(B[i].second);
+            to_send_to[to].emplace_back(B[i].second - offset(to),
+                                        B[i].first.first);
         }
 
         // Communicate processes sending values at desired positions
         size_t pos_in_B_prim = 0;
         send_offsets[0] = 0;
         for (int i = 0; i < number_of_processes; i++) {
-            if (i > 0)
-                send_offsets[i] = send_offsets[i - 1] + send_counts[i - 1];
             send_counts[i] = (int)to_send_to[i].size() *
                              sizeof(std::pair<uint64_t, uint64_t>);
+            if (i > 0)
+                send_offsets[i] = send_offsets[i - 1] + send_counts[i - 1];
             for (size_t j = 0; j < to_send_to[i].size(); j++, pos_in_B_prim++) {
-                B_prim[pos_in_B_prim] = to_send_to[i][j];
+                B_prim_source[pos_in_B_prim] = to_send_to[i][j];
             }
         }
-        MPI_Alltoallv(MPI_IN_PLACE, nullptr, nullptr, MPI_BYTE, B_prim.data(),
-                      send_counts.data(), send_offsets.data(), MPI_BYTE,
-                      MPI_COMM_WORLD);
 
+        MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(), 1,
+                     MPI_INT, MPI_COMM_WORLD);
+
+        recv_offsets[0] = 0;
+        for (int i = 1; i < number_of_processes; i++)
+            recv_offsets[i] = recv_offsets[i - 1] + recv_counts[i - 1];
+
+        MPI_Alltoallv(B_prim_source.data(), send_counts.data(),
+                      send_offsets.data(), MPI_BYTE, B_prim.data(),
+                      recv_counts.data(), recv_offsets.data(), MPI_BYTE,
+                      MPI_COMM_WORLD);
         for (uint64_t i = 0; i < my_genome_part_size; i++) {
-            assert(B_prim[i].first > my_genome_offset);
-            const size_t j = B_prim[i].first - my_genome_offset;
+            const size_t j = B_prim[i].first;
             B[j].first.first = B_prim[i].second;
             B_helper[j] = B[j].first.first;
         }
@@ -275,7 +290,7 @@ const std::vector<uint64_t> sa_word_size_param(
             uint64_t first_receiver_size = how_much_x_has(first_receiver_rank) -
                                            first_receiver_relative_offset;
             MPI_Isend(B_helper.data(), (int)first_receiver_size, MPI_UINT64_T,
-                      first_receiver_rank, 0, MPI_COMM_WORLD, nullptr);
+                      first_receiver_rank, 0, MPI_COMM_WORLD, &global_request);
         }
         int second_receiver_rank;
         if (my_genome_offset + my_genome_part_size > h + 1 &&
@@ -336,7 +351,21 @@ const std::vector<uint64_t> sa_word_size_param(
             my_rank, number_of_processes, genome_size, my_genome_part_size,
             my_genome_offset, B);
     }
-    std::cerr << "Done" << std::endl;
+
+    if (which == 2) {
+        for (int r = 0; r < number_of_processes; r++) {
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (my_rank == r) {
+                for (size_t i = 0; i < my_genome_part_size; i++) {
+                    std::cerr << B[i].second << " ";
+                }
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (my_rank == 0) std::cerr << std::endl;
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
 
     // TODO send borders
     // Answer the queries
