@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <tuple>
@@ -189,8 +190,9 @@ uint64_t my_lower_bound(
         if (my_genome_offset <= last_values[i] &&
             last_values[i] < my_genome_offset + my_genome_part_size)
             is_greater_or_equal[i] =
-                strcmp(query.c_str(),
-                       &buffer.c_str()[last_values[i] - my_genome_offset]) <= 0;
+                std::strcmp(
+                    query.c_str(),
+                    &buffer.c_str()[last_values[i] - my_genome_offset]) <= 0;
     }
     MPI_Allreduce(MPI_IN_PLACE, is_greater_or_equal.data(), number_of_processes,
                   MPI_C_BOOL, MPI_LOR, MPI_COMM_WORLD);
