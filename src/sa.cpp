@@ -31,6 +31,7 @@ uint64_t max_query_size = 0;
 const int ROOT = 0;
 
 MPI_Request global_request;
+MPI_Status global_status;
 const size_t char_size = 3;  // There are 4 characters -- A, C, T, G and one
                              // special character -- the end of the word
 static const size_t k_max = (64 - char_size) / char_size;
@@ -95,7 +96,7 @@ inline bool rebucket_and_check_all_singleton(
     }
 
     if (my_rank + 1 != number_of_processes) {
-        MPI_Wait(&get_next_one_request, nullptr);
+        MPI_Wait(&get_next_one_request, &global_status);
         if (prev_val == B[my_genome_part_size].first) {
             my_res = false;
         } else {
@@ -278,7 +279,7 @@ const std::vector<uint64_t> sa_word_size_param(
         current_value *= (1 << char_size);
         if (i < buffer.size()) {
             if (i == my_genome_part_size && my_genome_offset + i < genome_size)
-                MPI_Wait(&get_k_request, nullptr);
+                MPI_Wait(&get_k_request, &global_status);
             current_value += char_to_word(buffer[i]);
         }
         if (i > 0) M *= (1 << char_size);
@@ -292,7 +293,7 @@ const std::vector<uint64_t> sa_word_size_param(
         const size_t j = i + K_VAL;
         if (j < buffer.size()) {
             if (j == my_genome_part_size && my_genome_offset + j < genome_size)
-                MPI_Wait(&get_k_request, nullptr);
+                MPI_Wait(&get_k_request, &global_status);
             current_value += char_to_word(buffer[j]);
         }
     }
@@ -401,13 +402,13 @@ const std::vector<uint64_t> sa_word_size_param(
         }
 
         if (first_sender_rank != -1)
-            MPI_Wait(&got_B_plus_h_request[0], nullptr);
+            MPI_Wait(&got_B_plus_h_request[0], &global_status);
         for (uint64_t i = 0; i < my_genome_part_size; i++) {
             if (i + h < my_genome_part_size)
                 B[i].first.second = B[i + h].first.first;
             else if (my_genome_offset + i + h < genome_size) {
                 if (i == second_sender_relative_offset)
-                    MPI_Wait(&got_B_plus_h_request[1], nullptr);
+                    MPI_Wait(&got_B_plus_h_request[1], &global_status);
                 B[i].first.second = B_plus_h[i];
             } else
                 B[i].first.second = 0;
