@@ -26,7 +26,9 @@ using std::vector, std::pair;
 #define my_sort_full(B)                                        \
     (my_sort_params(my_rank, number_of_processes, genome_size, \
                     my_genome_part_size, B, 0, genome_size))
-#define printB() printB_fun(B, buffer.c_str(), my_genome_part_size)
+#define printB()                                                              \
+    printB_fun(B, buffer.c_str(), my_genome_part_size, after_last_occurrence, \
+               first_occurrence)
 #define ok()                                                                  \
     {                                                                         \
         if (my_rank < 16 && my_rank > 12)                                     \
@@ -101,7 +103,7 @@ inline bool rebucket_and_check_all_singleton(
     MPI_Request get_next_one_request;
     if (my_rank < number_of_processes - 1)
         MPI_Irecv(
-            &B[my_genome_part_size], MPI_UINT64_T, MPI_UINT64_T, my_rank + 1,
+            &B[my_genome_part_size], TUPLE_SIZE, MPI_UINT64_T, my_rank + 1,
             MPI_ANY_TAG, MPI_COMM_WORLD,
             &get_next_one_request);  // Instead of creating a custom MPI type, I
                                      // use MPI_UINT64_T and send data as bytes.
@@ -280,7 +282,8 @@ inline void my_sort_params(
 
 inline void printB_fun(
     const std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> &B,
-    const char *buffer, uint64_t genome_size) {
+    const char *buffer, uint64_t genome_size, const uint64_t x1,
+    const uint64_t x2) {
     for (uint64_t i = 0; i < genome_size; i++) {
         std::cerr << B[i].first.first << " ";
         if (B[i].second >= 10 && B[i].first.first < 10) std::cerr << " ";
@@ -295,6 +298,7 @@ inline void printB_fun(
     std::cerr << std::endl << std::endl;
 
     for (uint64_t i = 0; i < genome_size; i++) {
+        if (i == x1 || i == x2) std::cerr << "\t";
         std::cerr << &buffer[B[i].second] << std::endl;
     }
 }
