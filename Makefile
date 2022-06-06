@@ -2,7 +2,7 @@
 
 all: genome_index
 
-CC := mpic++
+CC := CC
 WARNING_OPTIONS := -Wextra -Wconversion -Wall -Wpedantic -Wno-cast-function-type
 WEAK_LINKER_OPTIONS := -O3 -fopenmp -std=c++17
 LINKER_OPTIONS := $(WARNING_OPTIONS) $(WEAK_LINKER_OPTIONS)
