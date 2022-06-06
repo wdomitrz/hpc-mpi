@@ -26,6 +26,8 @@ using std::vector, std::pair;
 #define ok() \
     { std::cerr << "ok:\t" << my_rank << "\t" << __LINE__ << std::endl; }
 
+const int ROOT = 0;
+
 MPI_Request global_request;
 const size_t char_size = 3;  // There are 4 characters -- A, C, T, G and one
                              // special character -- the end of the word
@@ -169,6 +171,24 @@ inline void printB_fun(
     // for (uint64_t i = 0; i < genome_size; i++) {
     //     std::cerr << &buffer[B[i].second] << std::endl;
     // }
+}
+
+uint64_t my_lower_bound(
+    const std::string &query,
+    const std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> &B,
+    const std::string &buffer) {
+    uint64_t b = 0, e = B.size(), m;
+    while (b < e) {
+        m = (b + e) / 2;
+        if (strcmp(query.c_str(),
+                   &buffer.c_str()[B[m].second]) >
+            0) {  // queries[i] > &buffer.c_str()[B[m].second]
+            b = m + 1;
+        } else {
+            e = m;
+        }
+    }
+    return b;
 }
 
 const std::vector<uint64_t> sa_word_size_param(
@@ -352,43 +372,29 @@ const std::vector<uint64_t> sa_word_size_param(
             my_genome_offset, B);
     }
 
-    // TODO send borders
+    // TODO: send string
     // Answer the queries
     std::vector<uint64_t> res(queries.size());
     for (uint64_t i = 0; i < queries.size(); i++) {
-        uint64_t first_occurrence, after_last_occurrence;
         // find first occurrence
-        {
-            uint64_t b = 0, e = B.size(), m;
-            while (b < e) {
-                m = (b + e) / 2;
-                if (strcmp(queries[i].c_str(),
-                           &buffer.c_str()[B[m].second]) >
-                    0) {  // queries[i] > &buffer.c_str()[B[m].second]
-                    b = m + 1;
-                } else {
-                    e = m;
-                }
-            }
-            first_occurrence = b;
-        }
+        const uint64_t first_occurrence = my_lower_bound(queries[i], B, buffer);
+
+        // find position after last occurrence
         queries[i][queries[i].size() - 1]++;
-        {
-            uint64_t b = 0, e = B.size(), m;
-            while (b < e) {
-                m = (b + e) / 2;
-                if (strcmp(queries[i].c_str(),
-                           &buffer.c_str()[B[m].second]) >
-                    0) {  // queries[i] > &buffer.c_str()[B[m].second]
-                    b = m + 1;
-                } else {
-                    e = m;
-                }
-            }
-            after_last_occurrence = b;
-        }
+        const uint64_t after_last_occurrence =
+            my_lower_bound(queries[i], B, buffer);
         queries[i][queries[i].size() - 1]--;
+
         res[i] = after_last_occurrence - first_occurrence;
+    }
+    if (my_rank == ROOT) {
+        std::vector<uint64_t> res_all(queries.size());
+        MPI_Reduce(res.data(), res_all.data(), (int)queries.size(),
+                   MPI_UINT64_T, MPI_SUM, ROOT, MPI_COMM_WORLD);
+        return res_all;
+    } else {
+        MPI_Reduce(res.data(), nullptr, (int)queries.size(), MPI_UINT64_T,
+                   MPI_SUM, ROOT, MPI_COMM_WORLD);
     }
     return res;
 }
@@ -411,7 +417,7 @@ void sa(int my_rank, int number_of_processes, uint64_t n, uint64_t m,
     }
 
     // Write the results to a file
-    {
+    if (my_rank == ROOT) {
         std::ofstream queries_out_file(queries_out);
         for (uint64_t j = 0; j < m; j++) {
             for (uint64_t i = 0; i < n; i++) {
