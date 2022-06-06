@@ -193,7 +193,6 @@ inline void my_sort_params(
         to_send_to[current_receiver].push_back(i);
     }
 
-    ok();
     send_offsets[0] = 0;
     send_counts[0] = static_cast<int>(TUPLE_SIZE * to_send_to[0].size());
     for (int i = 1; i < number_of_processes; i++) {
@@ -235,6 +234,7 @@ inline void my_sort_params(
         my_temp_offset = 1;
     }
 
+    send_offsets[0] = 0;
     for (int i = whose(my_temp_offset);
          i <= whose(my_temp_offset + my_temp_size - 1); i++) {
         send_counts[i] = static_cast<int>(std::min(
@@ -244,9 +244,39 @@ inline void my_sort_params(
         if (i > 0) send_offsets[i] = send_offsets[i - 1] + send_counts[i - 1];
     }
 
+    for (int r = 0; r < number_of_processes; r++) {
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (my_rank == r) {
+            int s = 0;
+            std::cerr << r << ":\t\t";
+            for (int i = 0; i < number_of_processes; i++) {
+                std::cerr << send_counts[i] / TUPLE_SIZE << " ";
+                s += send_counts[i] / TUPLE_SIZE;
+            }
+            std::cerr << " = " << s << std::endl;
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
     MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(), 1, MPI_INT,
                  MPI_COMM_WORLD);
 
+    recv_offsets[0] = 0;
+    for (int i = 1; i < number_of_processes; i++) {
+        recv_offsets[i] = recv_offsets[i - 1] + recv_counts[i - 1];
+    }
+    for (int r = 0; r < number_of_processes; r++) {
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (my_rank == r) {
+            int s = 0;
+            std::cerr << r << ":\t\t";
+            for (int i = 0; i < number_of_processes; i++) {
+                std::cerr << recv_counts[i] / TUPLE_SIZE << " ";
+                s += recv_counts[i] / TUPLE_SIZE;
+            }
+            std::cerr << " = " << s << std::endl;
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
     MPI_Alltoallv(temp_B.data(), send_counts.data(), send_offsets.data(),
                   MPI_UINT64_T, B.data(), recv_counts.data(),
                   recv_offsets.data(), MPI_UINT64_T, MPI_COMM_WORLD);
