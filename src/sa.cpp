@@ -120,10 +120,6 @@ inline void my_sort_params(
     const int my_rank, const int number_of_processes,
     const uint64_t genome_size, const uint64_t my_genome_part_size,
     std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> &B) {
-    // std::sort(B.data(), &B.data()[my_genome_part_size]);
-
-    std::sort(B.data(), &B.data()[number_of_processes]);
-
     if (my_rank == 0) {
         std::vector<int> recv_size(number_of_processes);
         std::vector<int> recv_offset(number_of_processes);
@@ -238,29 +234,29 @@ uint64_t my_lower_bound_old(
     return offset(found_rank) + pos;
 }
 
-uint64_t my_lower_bound(
+inline uint64_t my_lower_bound(
     const int my_rank, const int number_of_processes,
     const uint64_t genome_size, const uint64_t, const uint64_t my_genome_offset,
     const std::string &query,
     const std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> &B,
     const std::string &buffer) {
     uint64_t b = 0, e = genome_size, m;
-    uint64_t pos, local_pos;
+    uint64_t pos;
     int who_now;
-    bool current_comp, local_comp;
+    bool comp;
     while (b < e) {
         m = (b + e) / 2;
-        if (my_rank == (who_now = whose(m))) local_pos = B[m].second;
-        MPI_Scatter(&local_pos, 1, MPI_UINT64_T, &pos, 1, MPI_UINT64_T, who_now,
-                    MPI_COMM_WORLD);
 
-        if (my_rank == (who_now = whose(pos)))
-            local_comp = strcmp(query.c_str(),
-                                &buffer.c_str()[pos - my_genome_offset]) <= 0;
-        MPI_Scatter(&local_comp, 1, MPI_C_BOOL, &current_comp, 1, MPI_C_BOOL,
-                    who_now, MPI_COMM_WORLD);
+        if ((who_now = whose(m)) == my_rank)
+            pos = B[m - my_genome_offset].second;
+        MPI_Bcast(&pos, 1, MPI_UINT64_T, who_now, MPI_COMM_WORLD);
 
-        if (!current_comp) {
+        if ((who_now = whose(pos)) == my_rank)
+            comp = strcmp(query.c_str(),
+                          &buffer.c_str()[pos - my_genome_offset]) <= 0;
+        MPI_Bcast(&comp, 1, MPI_C_BOOL, who_now, MPI_COMM_WORLD);
+
+        if (!comp) {
             b = m + 1;
         } else {
             e = m;
