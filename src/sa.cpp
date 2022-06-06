@@ -26,6 +26,7 @@ using std::vector, std::pair;
 #define ok() \
     { std::cerr << "ok:\t" << my_rank << "\t" << __LINE__ << std::endl; }
 
+uint64_t max_query_size = 0;
 const int ROOT = 0;
 
 MPI_Request global_request;
@@ -154,7 +155,7 @@ inline void my_sort_params(
 
 inline void printB_fun(
     const std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> &B,
-    const char *, uint64_t genome_size) {
+    const char *buffer, uint64_t genome_size) {
     for (uint64_t i = 0; i < genome_size; i++) {
         std::cerr << B[i].first.first << " ";
         if (B[i].second >= 10 && B[i].first.first < 10) std::cerr << " ";
@@ -166,29 +167,68 @@ inline void printB_fun(
     }
     std::cerr << std::endl;
     for (uint64_t i = 0; i < genome_size; i++) std::cerr << B[i].second << " ";
-    // std::cerr << std::endl << std::endl;
+    std::cerr << std::endl << std::endl;
 
-    // for (uint64_t i = 0; i < genome_size; i++) {
-    //     std::cerr << &buffer[B[i].second] << std::endl;
-    // }
+    for (uint64_t i = 0; i < genome_size; i++) {
+        std::cerr << &buffer[B[i].second] << std::endl;
+    }
 }
 
 uint64_t my_lower_bound(
-    const std::string &query,
+    const int my_rank, const int number_of_processes,
+    const uint64_t genome_size, const uint64_t my_genome_part_size,
+    const uint64_t my_genome_offset, const std::string &query,
     const std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> &B,
     const std::string &buffer) {
-    uint64_t b = 0, e = B.size(), m;
-    while (b < e) {
-        m = (b + e) / 2;
-        if (strcmp(query.c_str(),
-                   &buffer.c_str()[B[m].second]) >
-            0) {  // queries[i] > &buffer.c_str()[B[m].second]
-            b = m + 1;
-        } else {
-            e = m;
-        }
+    std::vector<uint64_t> last_values(number_of_processes);
+    std::vector<uint16_t> is_greater_or_equal(number_of_processes, false);
+    MPI_Allgather(&B[my_genome_part_size - 1].second, 1, MPI_UINT64_T,
+                  last_values.data(), 1, MPI_UINT64_T, MPI_COMM_WORLD);
+
+    for (int i = 0; i < number_of_processes; i++) {
+        if (my_genome_offset <= last_values[i] &&
+            last_values[i] < my_genome_offset + my_genome_part_size)
+            is_greater_or_equal[i] =
+                strcmp(query.c_str(), &buffer.c_str()[last_values[i]]) <= 0;
     }
-    return b;
+    MPI_Allreduce(MPI_IN_PLACE, is_greater_or_equal.data(), number_of_processes,
+                  MPI_UINT16_T, MPI_LOR, MPI_COMM_WORLD);
+
+    int found_rank = 0;
+    while (found_rank < number_of_processes &&
+           !is_greater_or_equal[found_rank]) {
+        found_rank++;
+    }
+    if (found_rank == number_of_processes) return genome_size;
+
+    uint64_t size_of_found = how_much_x_has(found_rank);
+    std::vector<uint64_t> SA(size_of_found);
+    std::vector<uint16_t> is_here(size_of_found, false);
+    if (my_rank == found_rank) {
+        for (uint64_t i = 0; i < SA.size(); i++) {
+            SA[i] = B[i].second;
+        }
+        MPI_Bcast(SA.data(), (int)SA.size(), MPI_UINT64_T, found_rank,
+                  MPI_COMM_WORLD);
+    } else {
+        MPI_Bcast(SA.data(), (int)SA.size(), MPI_UINT64_T, found_rank,
+                  MPI_COMM_WORLD);
+    }
+
+    for (size_t i = 0; i < SA.size(); i++) {
+        if (my_genome_offset <= SA[i] &&
+            SA[i] < my_genome_offset + my_genome_part_size)
+            is_here[i] = strcmp(query.c_str(), &buffer.c_str()[SA[i]]) <= 0;
+    }
+
+    MPI_Allreduce(MPI_IN_PLACE, is_here.data(), (int)SA.size(), MPI_UINT8_T,
+                  MPI_LOR, MPI_COMM_WORLD);
+
+    uint64_t pos = 0;
+    while (!is_here[pos])  // We know that is_here[is_here.size()-1] is true.
+        pos++;
+
+    return offset(found_rank) + pos;
 }
 
 const std::vector<uint64_t> sa_word_size_param(
@@ -201,7 +241,8 @@ const std::vector<uint64_t> sa_word_size_param(
     std::vector<int> send_counts(number_of_processes),
         recv_counts(number_of_processes), send_offsets(number_of_processes),
         recv_offsets(number_of_processes);
-    std::string buffer(my_genome_part_size + K_VAL, 0);
+    const uint64_t extension_size = std::max(max_query_size - 1, K_VAL);
+    std::string buffer(my_genome_part_size + extension_size, 0);
     std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> B(
         my_genome_part_size + 1);
     std::vector<std::pair<uint64_t, uint64_t>> B_prim_source(
@@ -218,12 +259,13 @@ const std::vector<uint64_t> sa_word_size_param(
     // from the next node. We choose K_VAL, such that it fits onto every
     // node
     if (my_rank > 0)
-        MPI_Isend(buffer.c_str(), (int)K_VAL, MPI_CHAR, my_rank - 1, 0,
+        MPI_Isend(buffer.c_str(), (int)extension_size, MPI_CHAR, my_rank - 1, 0,
                   MPI_COMM_WORLD, &global_request);
     MPI_Request get_k_request;
     if (my_rank < number_of_processes - 1)
-        MPI_Irecv(&buffer.data()[my_genome_part_size], (int)K_VAL, MPI_CHAR,
-                  my_rank + 1, MPI_ANY_TAG, MPI_COMM_WORLD, &get_k_request);
+        MPI_Irecv(&buffer.data()[my_genome_part_size], (int)extension_size,
+                  MPI_CHAR, my_rank + 1, MPI_ANY_TAG, MPI_COMM_WORLD,
+                  &get_k_request);
 
     uint64_t M = 1;
     uint64_t current_value = 0;
@@ -375,26 +417,21 @@ const std::vector<uint64_t> sa_word_size_param(
     // TODO: send string
     // Answer the queries
     std::vector<uint64_t> res(queries.size());
+
     for (uint64_t i = 0; i < queries.size(); i++) {
         // find first occurrence
-        const uint64_t first_occurrence = my_lower_bound(queries[i], B, buffer);
+        const uint64_t first_occurrence = my_lower_bound(
+            my_rank, number_of_processes, genome_size, my_genome_part_size,
+            my_genome_offset, queries[i], B, buffer);
 
         // find position after last occurrence
         queries[i][queries[i].size() - 1]++;
-        const uint64_t after_last_occurrence =
-            my_lower_bound(queries[i], B, buffer);
+        const uint64_t after_last_occurrence = my_lower_bound(
+            my_rank, number_of_processes, genome_size, my_genome_part_size,
+            my_genome_offset, queries[i], B, buffer);
         queries[i][queries[i].size() - 1]--;
 
         res[i] = after_last_occurrence - first_occurrence;
-    }
-    if (my_rank == ROOT) {
-        std::vector<uint64_t> res_all(queries.size());
-        MPI_Reduce(res.data(), res_all.data(), (int)queries.size(),
-                   MPI_UINT64_T, MPI_SUM, ROOT, MPI_COMM_WORLD);
-        return res_all;
-    } else {
-        MPI_Reduce(res.data(), nullptr, (int)queries.size(), MPI_UINT64_T,
-                   MPI_SUM, ROOT, MPI_COMM_WORLD);
     }
     return res;
 }
@@ -408,6 +445,10 @@ void sa(int my_rank, int number_of_processes, uint64_t n, uint64_t m,
         std::ifstream queries_in_file(queries_in);
         for (uint64_t i = 0; i < m; i++) queries_in_file >> queries[i];
     }
+
+    max_query_size = 0;
+    for (size_t i = 0; i < queries.size(); i++)
+        max_query_size = std::max(max_query_size, queries[i].size());
 
     // Compute SA and answer the queries
     std::vector<std::vector<uint64_t>> res(n);
