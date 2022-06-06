@@ -3,8 +3,8 @@
 all: genome_index
 
 CC := CC
-WARNING_OPTIONS := -Wextra -Wconversion -Wall -Wpedantic -Wno-cast-function-type -Wno-sign-conversion
-WEAK_LINKER_OPTIONS := -O3 -fopenmp -std=c++17
+WARNING_OPTIONS := -Wextra -Wconversion -Wall -Wpedantic -Wno-sign-conversion
+WEAK_LINKER_OPTIONS := -fopenmp -std=c++17 -g
 LINKER_OPTIONS := $(WARNING_OPTIONS) $(WEAK_LINKER_OPTIONS)
 WEAK_COMPILTER_OPTIONS := $(WEAK_LINKER_OPTIONS) -c
 COMPILTER_OPTIONS := $(LINKER_OPTIONS) -c
