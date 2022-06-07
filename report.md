@@ -61,3 +61,16 @@ I also modified the above algorithm in order to adjust it to sorting just some c
 ## Using `k`-mers as the base
 
 Again as suggested in the provided paper, instead of executing the algorithm starting from single characters, we might start representing $k$ consecutive letters as individual character that fit into the type that we use to represent groups. I use `uint64_t` as the base type for my algorithm, and I choose value of the hyperparameter `k` accordingly.
+
+## Testing
+
+For generating small (of genome size no greater than `10000000`), random tests, I used script `gen_tests.py`, which generates given number tests with given numer of genomes (of given lengths), and queries (of given length). For testing I used a modified version of the given `run_tests.py` script. An example of a possible usage looks as follows.
+
+
+* Generate the tests:
+
+    `python3 ./gen_tests.py --genomes 10000 10000 10000 10000 --q-num 100 --q-len 10 --ensure-query-positive --num-tests 100 -o tests/my_tests_rand_10000/ --name test`
+
+* Run the tests agains the programme:
+
+    `./run_test.py -n 4 -m 100 --name tests/my_tests_rand_10000/test --n-tests 100`
