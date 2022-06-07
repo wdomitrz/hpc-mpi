@@ -125,14 +125,15 @@ inline bool rebucket_and_check_all_singleton(
     std::vector<uint64_t> my_partial_results(my_genome_part_size);
 
     if (my_rank > 0)
-        MPI_Isend(&first_val, 1, my_MPI_Triplet, my_rank - 1, 0, MPI_COMM_WORLD,
+        MPI_Isend(&first_val, 1, my_MPI_UINT64_Triplet, my_rank - 1, 0,
+                  MPI_COMM_WORLD,
                   &global_request);  // Instead of creating a custom MPI type, I
                                      // use MPI_UINT64_T and send data as bytes.
 
     MPI_Request get_next_one_request;
     if (my_rank < number_of_processes - 1)
         MPI_Irecv(
-            &B[my_genome_part_size], 1, my_MPI_Triplet, my_rank + 1,
+            &B[my_genome_part_size], 1, my_MPI_UINT64_Triplet, my_rank + 1,
             MPI_ANY_TAG, MPI_COMM_WORLD,
             &get_next_one_request);  // Instead of creating a custom MPI type, I
                                      // use MPI_UINT64_T and send data as bytes.
@@ -636,9 +637,9 @@ void sa(int my_rank, int number_of_processes, uint64_t n, uint64_t m,
         DataSource &data_source, const std::string &queries_in,
         const std::string &queries_out) {
     MPI_Type_contiguous(2, my_MPI_UINT64_Pair);
-    MPI_Type_contiguous(3, MPI_UINT64_T, &my_MPI_Triplet);
+    MPI_Type_contiguous(3, MPI_UINT64_T, &my_MPI_UINT64_Triplet);
     MPI_Type_commit(&my_MPI_UINT64_Pair);
-    MPI_Type_commit(&my_MPI_Triplet);
+    MPI_Type_commit(&my_MPI_UINT64_Triplet);
     // Read queries
     std::vector<std::string> queries(m);
     {
