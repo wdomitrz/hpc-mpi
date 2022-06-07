@@ -80,6 +80,8 @@ On the specified configuration (4 nodes, 24 threads per node), the test from `/l
 
 ### Strong and weak scaling
 
-Here I present graphs representing strong and weak scaling speedup with various numbers of processes.
+Here I present graphs representing strong and weak scaling speedup with various numbers of processes. The graphs were generated using `get_strong_scaling.py` and `get_weak_scaling.py` scripts. For generating strong scaling results I used a single genome with `167841102` characters, and for weak scaling, a single genome with `31470206 * n` characters, where `n` is the number of processes.
 
 ![Graph representing strong scaling](./strong_scaling.png)
+
+![Graph representing weak scaling](./weak_scaling.png)
