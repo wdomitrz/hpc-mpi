@@ -8,6 +8,7 @@
 #include <iostream>
 #include <random>
 #include <tuple>
+#include <unordered_set>
 #include <vector>
 
 #include "data_source.h"
@@ -25,9 +26,10 @@ using std::vector, std::pair;
 #define my_sort_full(B)                                        \
     (my_sort_params(my_rank, number_of_processes, genome_size, \
                     my_genome_part_size, B, 0, genome_size))
-#define printB()                                                              \
-    printB_fun(B, buffer.c_str(), my_genome_part_size, after_last_occurrence, \
-               first_occurrence)
+#define my_sort_groups(B)                                              \
+    (my_partial_sorts_param(my_rank, number_of_processes, genome_size, \
+                            my_genome_part_size, genome_size))
+#define printB(x, y) printB_fun(B, buffer.c_str(), my_genome_part_size, x, y)
 #define ok() \
     { std::cerr << "ok:\t" << my_rank << "\t" << __LINE__ << std::endl; }
 #define assertm(exp, msg) assert(((void)msg, exp))
@@ -54,7 +56,7 @@ static inline uint64_t whose_param(uint64_t x, uint64_t number_of_processes,
     return (x - M) / (step);
 }
 
-static const size_t k_max = (64 - char_size) / char_size;
+static const size_t k_max = 1;  // (64 - char_size) / char_size;
 static inline uint64_t char_to_word(char c) {
     switch (c) {
         case 'A':
@@ -422,6 +424,181 @@ inline uint64_t my_lower_bound(
     return b;
 }
 
+inline uint64_t find_in_b_first_first(
+    uint64_t b, uint64_t e, uint64_t what,
+    std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> &B) {
+    uint64_t m;
+    while (b < e) {
+        m = (b + e) / 2;
+
+        bool comp = what <= B[m].first.first;
+        if (!comp) {
+            b = m + 1;
+        } else {
+            e = m;
+        }
+    }
+    return b;
+}
+
+inline void my_sort_params_partial(
+    int my_rank, int number_of_processes, const uint64_t genome_size,
+    const uint64_t my_genome_part_size,
+    std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> &B,
+    const uint64_t begin,
+    const uint64_t end) {  // TODO: I could use custom MPI communicator, but in
+                           // this case, it wouldn't be significantly better
+    if (end <= begin) return;
+
+    int proc_min = static_cast<int>(whose(begin));
+    int proc_max = static_cast<int>(whose(end - 1));
+    assert(proc_min <= proc_max && proc_max < number_of_processes);
+    if (proc_min == proc_max) {
+        return;
+    }
+    bool am_i_in = (proc_min <= my_rank && my_rank <= proc_max);
+
+    MPI_Comm custom_comm;
+    MPI_Comm_split(MPI_COMM_WORLD, am_i_in, my_rank, &custom_comm);
+
+    number_of_processes = proc_max - proc_min + 1;
+    my_rank -= proc_min;
+
+    // Now only processes involved will continue
+    if (!am_i_in) return;
+
+    std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> pivots(
+        number_of_processes);
+    std::vector<int> send_offsets(number_of_processes),
+        send_counts(number_of_processes, 0), recv_offsets(number_of_processes),
+        recv_counts(number_of_processes);
+    std::uniform_int_distribution<uint64_t> uniform_distribution(
+        0, my_genome_part_size - 1);
+
+    pivots[my_rank] = B[uniform_distribution(random_generator)];
+    MPI_Request pivots_request;
+    MPI_Iallgather(MPI_IN_PLACE, 3, MPI_UINT64_T, pivots.data(), 3,
+                   MPI_UINT64_T, custom_comm, &pivots_request);
+    MPI_Wait(&pivots_request, &global_status);
+    std::sort(pivots.begin(), pivots.end() - 1);
+
+    int current_receiver = 0;
+    for (uint64_t i = 0; i < my_genome_part_size; i++) {
+        while (current_receiver + 1 < number_of_processes &&
+               pivots[current_receiver] < B[i])
+            current_receiver++;
+        send_counts[current_receiver] += TUPLE_SIZE;
+    }
+
+    send_offsets[0] = 0;
+    for (int i = 1; i < number_of_processes; i++) {
+        send_offsets[i] = send_offsets[i - 1] + send_counts[i - 1];
+    }
+
+    MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(), 1, MPI_INT,
+                 custom_comm);
+
+    recv_offsets[0] = 0;
+    for (int i = 1; i < number_of_processes; i++) {
+        recv_offsets[i] = recv_offsets[i - 1] + recv_counts[i - 1];
+    }
+
+    uint64_t my_temp_size = recv_offsets[number_of_processes - 1] +
+                            recv_counts[number_of_processes - 1],
+             my_temp_offset;
+
+    my_temp_size /= TUPLE_SIZE;
+
+    std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> temp_B(
+        my_temp_size + 1);
+
+    MPI_Alltoallv(B.data(), send_counts.data(), send_offsets.data(),
+                  MPI_UINT64_T, (uint64_t *)temp_B.data(), recv_counts.data(),
+                  recv_offsets.data(), MPI_UINT64_T, custom_comm);
+
+    MPI_Request temp_offset_request;
+
+    MPI_Iexscan(&my_temp_size, &my_temp_offset, 1, MPI_UINT64_T, MPI_SUM,
+                custom_comm, &temp_offset_request);
+
+    std::sort(temp_B.begin(), temp_B.end() - 1);
+    std::fill(send_counts.begin(), send_counts.end(), 0);
+    std::fill(send_offsets.begin(), send_offsets.end(), 0);
+
+    MPI_Wait(&temp_offset_request, &global_status);
+    if (my_rank == 0) {
+        my_temp_offset = 0;
+    }
+
+    send_offsets[0] = 0;
+    for (uint64_t i = (whose(my_temp_offset));
+         my_temp_offset < genome_size && my_temp_size > 0 &&
+         i <= whose(my_temp_offset + my_temp_size - 1);
+         i++) {
+        send_counts[i] = static_cast<int>(std::min(
+            my_temp_size, how_much_x_has(static_cast<int>(i)) +
+                              offset(static_cast<int>(i)) - my_temp_offset));
+        my_temp_size -= send_counts[i];
+        my_temp_offset += send_counts[i];
+        send_counts[i] *= TUPLE_SIZE;
+        if (i > 0) send_offsets[i] = send_offsets[i - 1] + send_counts[i - 1];
+    }
+
+    MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(), 1, MPI_INT,
+                 custom_comm);
+
+    recv_offsets[0] = 0;
+    for (int i = 1; i < number_of_processes; i++) {
+        recv_offsets[i] = recv_offsets[i - 1] + recv_counts[i - 1];
+    }
+
+    MPI_Alltoallv(temp_B.data(), send_counts.data(), send_offsets.data(),
+                  MPI_UINT64_T, B.data(), recv_counts.data(),
+                  recv_offsets.data(), MPI_UINT64_T, custom_comm);
+}
+inline void my_partial_sorts_param(
+    const int my_rank, const int number_of_processes,
+    const uint64_t genome_size, const uint64_t my_genome_part_size,
+    const uint64_t my_genome_offset,
+    std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> &B) {
+    std::sort(B.data(),
+              &B.data()[my_genome_part_size]);  // Sort each node
+
+    std::unordered_set<uint64_t> sorted_groups;
+
+    uint64_t sort_now;
+    uint64_t my_to_sort[2] = {B[0].first.first,
+                              B[my_genome_part_size - 1].first.first};
+    for (int r = 0; r < number_of_processes; r++) {  // Sort borders
+        for (int j = 0; j < 2; j++) {
+            if (my_rank == r) {
+                sort_now = my_to_sort[j];
+                MPI_Bcast(&sort_now, 1, MPI_UINT64_T, r, MPI_COMM_WORLD);
+            } else {
+                MPI_Bcast(&sort_now, 1, MPI_UINT64_T, r, MPI_COMM_WORLD);
+            }
+            if (sorted_groups.find(sort_now) !=
+                sorted_groups.end())  // Already sorted this group
+                continue;
+
+            uint64_t begin_end[2];
+            begin_end[0] =
+                my_genome_offset +
+                find_in_b_first_first(0, my_genome_part_size, sort_now, B);
+            begin_end[1] = std::numeric_limits<uint64_t>::max() -
+                           (my_genome_offset +
+                            find_in_b_first_first(0, my_genome_part_size,
+                                                  sort_now + 1, B));
+            MPI_Allreduce(MPI_IN_PLACE, begin_end, 2, MPI_UINT64_T, MPI_MIN,
+                          MPI_COMM_WORLD);
+            begin_end[1] = std::numeric_limits<uint64_t>::max() - begin_end[1];
+            my_sort_params_partial(my_rank, number_of_processes, genome_size,
+                                   my_genome_part_size, B, begin_end[0],
+                                   begin_end[1]);
+        }
+    }
+}
+
 const std::vector<uint64_t> sa_word_size_param(
     int my_rank, int number_of_processes, int which, DataSource &data_source,
     std::vector<std::string> queries) {
@@ -617,6 +794,10 @@ const std::vector<uint64_t> sa_word_size_param(
             } else
                 B[i].first.second = 0;
         }
+        // if (groups == genome_size)
+        //     my_sort_groups(B);
+        // else
+        printB(-1, -1);
         my_sort_full(B);
         groups =
             rebucket_and_count_groups(my_rank, number_of_processes, genome_size,
