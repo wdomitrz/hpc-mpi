@@ -26,9 +26,7 @@ using std::vector, std::pair;
 #define my_sort_full(B)                                        \
     (my_sort_params(my_rank, number_of_processes, genome_size, \
                     my_genome_part_size, B, 0, genome_size))
-#define printB()                                                              \
-    printB_fun(B, buffer.c_str(), my_genome_part_size, after_last_occurrence, \
-               first_occurrence)
+#define printB(x, y) printB_fun(B, buffer.c_str(), my_genome_part_size, x, y)
 #define ok() \
     { std::cerr << "ok:\t" << my_rank << "\t" << __LINE__ << std::endl; }
 #define assertm(exp, msg) assert(((void)msg, exp))
