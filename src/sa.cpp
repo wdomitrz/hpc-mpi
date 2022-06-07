@@ -120,11 +120,12 @@ inline bool rebucket_and_check_all_singleton(
     int my_rank, int number_of_processes, const uint64_t,
     const uint64_t my_genome_part_size, const uint64_t,
     std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> &B) {
+    std::pair<std::pair<uint64_t, uint64_t>, uint64_t> first_val = B[0];
     bool my_res = true;
     std::vector<uint64_t> my_partial_results(my_genome_part_size);
 
     if (my_rank > 0)
-        MPI_Isend(&B[0], TUPLE_SIZE, MPI_UINT64_T, my_rank - 1, 0,
+        MPI_Isend(&first_val, TUPLE_SIZE, MPI_UINT64_T, my_rank - 1, 0,
                   MPI_COMM_WORLD,
                   &global_request);  // Instead of creating a custom MPI type, I
                                      // use MPI_UINT64_T and send data as bytes.
