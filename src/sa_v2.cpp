@@ -176,7 +176,10 @@ inline void my_sort_params_old(
     const int my_rank, const int number_of_processes,
     const uint64_t genome_size, const uint64_t my_genome_part_size,
     std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> &B,
-    const uint64_t, const uint64_t) {
+    const uint64_t begin, const uint64_t end) {
+    if (end <= begin) return;
+    assert(end <= genome_size);
+
     if (my_rank == ROOT) {
         std::vector<int> recv_size(number_of_processes);
         std::vector<int> recv_offset(number_of_processes);
@@ -188,13 +191,13 @@ inline void my_sort_params_old(
         }
 
         std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> B_all(
-            genome_size);
+            genome_size + 1);
 
         MPI_Gatherv(B.data(),
                     static_cast<int>(TUPLE_SIZE * my_genome_part_size),
                     MPI_UINT64_T, B_all.data(), recv_size.data(),
                     recv_offset.data(), MPI_UINT64_T, 0, MPI_COMM_WORLD);
-        std::sort(B_all.begin(), B_all.end());
+        std::sort(&B_all.data()[begin], &B_all.data()[end]);
         MPI_Scatterv(B_all.data(), recv_size.data(), recv_offset.data(),
                      MPI_UINT64_T, B.data(),
                      static_cast<int>(TUPLE_SIZE * my_genome_part_size),
