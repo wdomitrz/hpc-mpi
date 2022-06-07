@@ -3,3 +3,4 @@ genome_index_seq
 *.o
 .vscode
 res
+genome_index_v1
