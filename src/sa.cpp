@@ -55,7 +55,7 @@ static inline uint64_t whose_param(uint64_t x, uint64_t number_of_processes,
     return (x - M) / (step);
 }
 
-static const size_t k_max = 1;  //(64 - char_size) / char_size;
+static const size_t k_max = (64 - char_size) / char_size;
 static inline uint64_t char_to_word(char c) {
     switch (c) {
         case 'A':
@@ -68,6 +68,38 @@ static inline uint64_t char_to_word(char c) {
             return 4;
     }
     return 0;
+}
+
+void printBs(
+    int number_of_processes, uint64_t my_genome_part_size, int my_rank,
+    std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> &B) {
+    for (int r = 0; r < number_of_processes; r++) {
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (r == my_rank) {
+            for (uint64_t i = 0; i < my_genome_part_size; i++) {
+                std::cerr << B[i].first.first << " ";
+            }
+            std::cerr << std::endl;
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (r == my_rank) {
+            for (uint64_t i = 0; i < my_genome_part_size; i++) {
+                std::cerr << B[i].first.second << " ";
+            }
+            std::cerr << std::endl;
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (r == my_rank) {
+            for (uint64_t i = 0; i < my_genome_part_size; i++) {
+                std::cerr << B[i].second << " ";
+            }
+            if (my_rank == number_of_processes - 1) std::cerr << std::endl;
+            std::cerr << std::endl;
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
 }
 
 inline static uint64_t how_much_node_has(int rank, int nprocs,
@@ -560,8 +592,8 @@ const std::vector<uint64_t> sa_word_size_param(
                       MPI_UINT64_T, first_sender_rank, MPI_ANY_TAG,
                       MPI_COMM_WORLD, &got_B_plus_h_request[0]);
         }
-        bool second_recv = false;
         int second_sender_rank;
+        uint64_t second_sender_relative_offset = 0;
         if (my_genome_offset + my_genome_part_size + h - 1 < genome_size &&
             (second_sender_rank = static_cast<int>(whose(
                  my_genome_offset + my_genome_part_size + h - 1))) != my_rank) {
@@ -570,21 +602,20 @@ const std::vector<uint64_t> sa_word_size_param(
                                           offset(second_sender_rank);
             uint64_t second_sender_relative_offset =
                 my_genome_part_size - second_sender_size;
-            second_recv = true;
             MPI_Irecv(&B_plus_h.data()[second_sender_relative_offset],
                       static_cast<int>(second_sender_size), MPI_UINT64_T,
                       second_sender_rank, MPI_ANY_TAG, MPI_COMM_WORLD,
                       &got_B_plus_h_request[1]);
         }
-        std::cerr << h << std::endl;
 
         if (first_recv) MPI_Wait(&got_B_plus_h_request[0], &global_status);
-        if (second_recv) MPI_Wait(&got_B_plus_h_request[1], &global_status);
         for (uint64_t i = 0; i < my_genome_part_size; i++) {
-            B[i].second = i;
+            B[i].second = my_genome_offset + i;
             if (i + h < my_genome_part_size)
                 B[i].first.second = B[i + h].first.first;
             else if (my_genome_offset + i + h < genome_size) {
+                if (i == second_sender_relative_offset)
+                    MPI_Wait(&got_B_plus_h_request[1], &global_status);
                 B[i].first.second = B_plus_h[i];
             } else
                 B[i].first.second = 0;
