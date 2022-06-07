@@ -29,11 +29,8 @@ using std::vector, std::pair;
 #define printB()                                                              \
     printB_fun(B, buffer.c_str(), my_genome_part_size, after_last_occurrence, \
                first_occurrence)
-#define ok()                                                                  \
-    {                                                                         \
-        if (my_rank < 16 && my_rank > 12)                                     \
-            std::cerr << "ok:\t" << my_rank << "\t" << __LINE__ << std::endl; \
-    }
+#define ok() \
+    { std::cerr << "ok:\t" << my_rank << "\t" << __LINE__ << std::endl; }
 #define assertm(exp, msg) assert(((void)msg, exp))
 
 // std::random_device random_device;
@@ -110,12 +107,13 @@ inline bool rebucket_and_check_all_singleton(
 
     uint64_t my_count = 0;
     std::pair<uint64_t, uint64_t> prev_val = B[0].first;
-    B[0].first = std::make_pair(0, 0);
+    B[0].first = std::make_pair(1, 0);
     for (size_t i = 1; i < my_genome_part_size; i++) {
         if (prev_val == B[i].first) {
             B[i].first = B[i - 1].first;
             my_res = false;
         } else {
+            prev_val = B[i].first;
             B[i].first = B[i - 1].first;
             B[i].first.first++;
             my_count++;
@@ -575,6 +573,7 @@ const std::vector<uint64_t> sa_word_size_param(
         if (first_sender_rank != -1)
             MPI_Wait(&got_B_plus_h_request[0], &global_status);
         for (uint64_t i = 0; i < my_genome_part_size; i++) {
+            B[i].second = i;
             if (i + h < my_genome_part_size)
                 B[i].first.second = B[i + h].first.first;
             else if (my_genome_offset + i + h < genome_size) {
