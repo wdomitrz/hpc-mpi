@@ -539,7 +539,8 @@ const std::vector<uint64_t> sa_word_size_param(
             if (second_receiver_relative_offset < my_genome_part_size)
                 MPI_Isend(&B_helper.data()[second_receiver_relative_offset],
                           static_cast<int>(second_receiver_size), MPI_UINT64_T,
-                          second_receiver_rank, 0, MPI_COMM_WORLD, nullptr);
+                          second_receiver_rank, 0, MPI_COMM_WORLD,
+                          &global_request);
         }
         int first_sender_rank = -1;
         if (h >= my_genome_part_size && my_genome_offset + h < genome_size &&
