@@ -115,15 +115,15 @@ inline static uint64_t get_node_genome_offset(int rank, int nprocs,
     return offset;
 }
 
-inline bool rebucket_and_check_all_singleton(
+inline uint64_t rebucket_and_count_groups(
     int my_rank, int number_of_processes, const uint64_t,
     const uint64_t my_genome_part_size, const uint64_t,
     std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> &B) {
-    bool my_res = true;
+    std::pair<std::pair<uint64_t, uint64_t>, uint64_t> first_val = B[0];
     std::vector<uint64_t> my_partial_results(my_genome_part_size);
 
     if (my_rank > 0)
-        MPI_Isend(&B[0], TUPLE_SIZE, MPI_UINT64_T, my_rank - 1, 0,
+        MPI_Isend(&first_val, TUPLE_SIZE, MPI_UINT64_T, my_rank - 1, 0,
                   MPI_COMM_WORLD,
                   &global_request);  // Instead of creating a custom MPI type, I
                                      // use MPI_UINT64_T and send data as bytes.
@@ -142,7 +142,6 @@ inline bool rebucket_and_check_all_singleton(
     for (size_t i = 1; i < my_genome_part_size; i++) {
         if (prev_val == B[i].first) {
             B[i].first = B[i - 1].first;
-            my_res = false;
         } else {
             prev_val = B[i].first;
             B[i].first = B[i - 1].first;
@@ -153,15 +152,11 @@ inline bool rebucket_and_check_all_singleton(
 
     if (my_rank + 1 != number_of_processes) {
         MPI_Wait(&get_next_one_request, &global_status);
-        if (prev_val == B[my_genome_part_size].first) {
-            my_res = false;
-        } else {
+        if (prev_val != B[my_genome_part_size].first) {
             my_count++;
         }
     }
 
-    MPI_Allreduce(MPI_IN_PLACE, &my_res, 1, MPI_C_BOOL, MPI_LAND,
-                  MPI_COMM_WORLD);
     MPI_Exscan(MPI_IN_PLACE, &my_count, 1, MPI_UINT64_T, MPI_SUM,
                MPI_COMM_WORLD);
 
@@ -169,17 +164,17 @@ inline bool rebucket_and_check_all_singleton(
         for (size_t i = 0; i < my_genome_part_size; i++)
             B[i].first.first += my_count;
 
-    return my_res;
+    uint64_t groups = B[my_genome_part_size - 1].first.first;
+    MPI_Bcast(&groups, 1, MPI_UINT64_T, number_of_processes - 1,
+              MPI_COMM_WORLD);
+    return groups;
 }
 
 inline void my_sort_params_old(
     const int my_rank, const int number_of_processes,
     const uint64_t genome_size, const uint64_t my_genome_part_size,
     std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> &B,
-    const uint64_t begin, const uint64_t end) {
-    if (end <= begin) return;
-    assert(end <= genome_size);
-
+    const uint64_t, const uint64_t) {
     if (my_rank == ROOT) {
         std::vector<int> recv_size(number_of_processes);
         std::vector<int> recv_offset(number_of_processes);
@@ -191,13 +186,13 @@ inline void my_sort_params_old(
         }
 
         std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> B_all(
-            genome_size + 1);
+            genome_size);
 
         MPI_Gatherv(B.data(),
                     static_cast<int>(TUPLE_SIZE * my_genome_part_size),
                     MPI_UINT64_T, B_all.data(), recv_size.data(),
                     recv_offset.data(), MPI_UINT64_T, 0, MPI_COMM_WORLD);
-        std::sort(&B_all.data()[begin], &B_all.data()[end]);
+        std::sort(B_all.begin(), B_all.end());
         MPI_Scatterv(B_all.data(), recv_size.data(), recv_offset.data(),
                      MPI_UINT64_T, B.data(),
                      static_cast<int>(TUPLE_SIZE * my_genome_part_size),
@@ -492,11 +487,11 @@ const std::vector<uint64_t> sa_word_size_param(
     // Create SA
 
     my_sort_full(B);  // sorting
-    bool done = rebucket_and_check_all_singleton(
-        my_rank, number_of_processes, genome_size, my_genome_part_size,
-        my_genome_offset, B);
+    uint64_t groups =
+        rebucket_and_count_groups(my_rank, number_of_processes, genome_size,
+                                  my_genome_part_size, my_genome_offset, B);
 
-    for (uint64_t h = K_VAL; h < genome_size; h *= 2) {
+    for (uint64_t h = K_VAL;; h *= 2) {
         std::vector<std::vector<std::pair<uint64_t, uint64_t>>> to_send_to(
             number_of_processes);
         for (uint64_t i = 0; i < my_genome_part_size; i++) {
@@ -543,7 +538,7 @@ const std::vector<uint64_t> sa_word_size_param(
             const size_t j = B_prim[i].first - my_genome_offset;
             B[j].first.first = B_prim[i].second;
         }
-        if (done) {
+        if (groups == genome_size) {
             break;
         }
 
@@ -623,9 +618,9 @@ const std::vector<uint64_t> sa_word_size_param(
                 B[i].first.second = 0;
         }
         my_sort_full(B);
-        done = rebucket_and_check_all_singleton(
-            my_rank, number_of_processes, genome_size, my_genome_part_size,
-            my_genome_offset, B);
+        groups =
+            rebucket_and_count_groups(my_rank, number_of_processes, genome_size,
+                                      my_genome_part_size, my_genome_offset, B);
     }
 
     // Answer the queries
