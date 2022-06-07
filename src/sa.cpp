@@ -521,8 +521,8 @@ const std::vector<uint64_t> sa_word_size_param(
 
         MPI_Alltoallv(B_prim_source.data(), send_counts.data(),
                       send_offsets.data(), my_MPI_UINT64_Pair, B_prim.data(),
-                      recv_counts.data(), recv_offsets.data(), MPI_UINT64_T,
-                      MPI_COMM_WORLD);
+                      recv_counts.data(), recv_offsets.data(),
+                      my_MPI_UINT64_Pair, MPI_COMM_WORLD);
         for (uint64_t i = 0; i < my_genome_part_size; i++) {
             const size_t j = B_prim[i].first - my_genome_offset;
             B[j].first.first = B_prim[i].second;
