@@ -23,9 +23,9 @@ using std::vector, std::pair;
     (how_much_node_has(rank, number_of_processes, genome_size))
 #define offset(rank) \
     (get_node_genome_offset(rank, number_of_processes, genome_size))
-#define my_sort_full(B)                                            \
-    (my_sort_params_old(my_rank, number_of_processes, genome_size, \
-                        my_genome_part_size, B, 0, genome_size))
+#define my_sort_full(B)                                        \
+    (my_sort_params(my_rank, number_of_processes, genome_size, \
+                    my_genome_part_size, B, 0, genome_size))
 #define printB()                                                              \
     printB_fun(B, buffer.c_str(), my_genome_part_size, after_last_occurrence, \
                first_occurrence)
