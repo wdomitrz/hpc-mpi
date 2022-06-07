@@ -636,7 +636,7 @@ const std::vector<uint64_t> sa_word_size_param(
 void sa(int my_rank, int number_of_processes, uint64_t n, uint64_t m,
         DataSource &data_source, const std::string &queries_in,
         const std::string &queries_out) {
-    MPI_Type_contiguous(2, my_MPI_UINT64_Pair);
+    MPI_Type_contiguous(2, MPI_UINT64_T, &my_MPI_UINT64_Pair);
     MPI_Type_contiguous(3, MPI_UINT64_T, &my_MPI_UINT64_Triplet);
     MPI_Type_commit(&my_MPI_UINT64_Pair);
     MPI_Type_commit(&my_MPI_UINT64_Triplet);
