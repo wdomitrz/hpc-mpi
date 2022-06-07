@@ -56,7 +56,7 @@ static inline uint64_t whose_param(uint64_t x, uint64_t number_of_processes,
     return (x - M) / (step);
 }
 
-static const size_t k_max = 1;  // (64 - char_size) / char_size;
+static const size_t k_max = (64 - char_size) / char_size;
 static inline uint64_t char_to_word(char c) {
     switch (c) {
         case 'A':
