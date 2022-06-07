@@ -9,7 +9,10 @@ LINKER_OPTIONS := $(WARNING_OPTIONS) $(WEAK_LINKER_OPTIONS)
 WEAK_COMPILTER_OPTIONS := $(WEAK_LINKER_OPTIONS) -c
 COMPILTER_OPTIONS := $(LINKER_OPTIONS) -c
 
-genome_index: src/main.cpp data_source.o sa_v2.o src/params.hpp data_source.o src/sa.hpp src/data_source.h
+genome_index: genome_index_v1
+	cp genome_index_v1 genome_index
+
+genome_index_v2: src/main.cpp data_source.o sa_v2.o src/params.hpp data_source.o src/sa.hpp src/data_source.h
 	$(CC) $(LINKER_OPTIONS) -o $@ $< data_source.o sa_v2.o
 
 genome_index_v1: src/main.cpp data_source.o sa.o src/params.hpp data_source.o src/sa.hpp src/data_source.h
@@ -31,7 +34,7 @@ sa_seq.o: src/sa_seq.cpp src/sa.hpp src/data_source.h Makefile
 	$(CC) $(COMPILTER_OPTIONS) $<
 
 clean:
-	rm -f src/*.o *.o genome_index genome_index_seq genome_index_v1
+	rm -f src/*.o *.o genome_index genome_index_seq genome_index_v1 genome_index_v2
 
 report.pdf: report.md
 	pandoc $^ -o $@
