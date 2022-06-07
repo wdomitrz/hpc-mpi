@@ -73,3 +73,13 @@ For generating small (of genome size no greater than `10000000`), random tests, 
 * Run the tests agains the programme:
 
     `./run_test.py -n 4 -m 100 --name tests/my_tests_rand_10000/test --n-tests 100`
+
+## Performance and scaling
+
+On the specified configuration (4 nodes, 24 threads per node), the test from `/lustre/tetyda/home/adinar/public_html/perf_test`, with `4` genomes and `80` queries takes noticeably less than the specified 5 minutes.
+
+### Strong and weak scaling
+
+Here I present graphs representing strong and weak scaling speedup with various numbers of processes.
+
+![Graph representing strong scaling](./strong_scaling.png)
