@@ -18,7 +18,7 @@ The files in that directory are:
 
 ## Algorithm
 
-I implement the algorithm for creating the suffix array from the provided paper. As the sorting algorithm, I use my own implementation of [*samplesort*](https://en.wikipedia.org/wiki/Samplesort), as suggested in the provided paper. This implementation is contained in function in `my_sort_params` (in `src/sa.cpp` file), and is generalized in `sa_word_size_param` (and `my_partial_sorts_param`) (in `src/sa_v2.cpp` file).
+I implement the algorithm for creating the suffix array from the provided paper. As the sorting algorithm, I use my own implementation of [*sample sort*](https://en.wikipedia.org/wiki/Samplesort), as suggested in the provided paper. This implementation is contained in function in `my_sort_params` (in `src/sa.cpp` file), and is generalized in `sa_word_size_param` (and `my_partial_sorts_param`) (in `src/sa_v2.cpp` file).
 
 As suggested, in order to compute the number of occurrences of some given query, I use binary search in order to find positions of the first and the last occurrence of words containing the query in the suffix array (or more precisely, positions of the first occurrence of a word that is not smaller than the query and the first occurrence of a word that is greater than the query). Then the difference of this values determines the number of occurrences of the query in considered string.
 
@@ -52,7 +52,7 @@ While it is not a part of the main version of the programme, I used custom MPI c
 
 ## Sorting algorithm
 
-One of the crucial components of the implemented algorithm is the sorting algorithm. As the authors of provided paper suggests, I have decided to implement selection sort, in which I randomly partition the whole array into as many parts, as we have the nodes taking part in the computation (by choosing random pivot elements from each but one node), and then, on each node, I sort the elements there using standard, sequential quick-sort, and finally I redistribute the data back to the relevant nodes.
+One of the crucial components of the implemented algorithm is the sorting algorithm. As the authors of provided paper suggests, I have decided to implement [*sample sort*](https://en.wikipedia.org/wiki/Samplesort), in which I randomly partition the whole array into as many parts, as we have the nodes taking part in the computation (by choosing random pivot elements from each but one node), and then, on each node, I sort the elements there using standard, sequential quick-sort, and finally I redistribute the data back to the relevant nodes.
 
 ### Customized sorting algorithm
 
