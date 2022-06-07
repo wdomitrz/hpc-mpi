@@ -10,7 +10,7 @@ WEAK_COMPILTER_OPTIONS := $(WEAK_LINKER_OPTIONS) -c
 COMPILTER_OPTIONS := $(LINKER_OPTIONS) -c
 
 genome_index: src/main.cpp data_source.o sa_v2.o src/params.hpp data_source.o src/sa.hpp src/data_source.h
-	$(CC) $(LINKER_OPTIONS) -o $@ $< data_source.o sa.o
+	$(CC) $(LINKER_OPTIONS) -o $@ $< data_source.o sa_v2.o
 
 genome_index_v1: src/main.cpp data_source.o sa.o src/params.hpp data_source.o src/sa.hpp src/data_source.h
 	$(CC) $(LINKER_OPTIONS) -o $@ $< data_source.o sa.o
