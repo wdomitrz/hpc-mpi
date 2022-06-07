@@ -435,7 +435,7 @@ const std::vector<uint64_t> sa_word_size_param(
     std::vector<int> send_counts(number_of_processes),
         recv_counts(number_of_processes), send_offsets(number_of_processes),
         recv_offsets(number_of_processes);
-    const uint64_t extension_size = std::max(max_query_size - 1, K_VAL);
+    const uint64_t extension_size = std::max(max_query_size, K_VAL);
     std::string buffer(my_genome_part_size + extension_size, 0);
     std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint64_t>> B(
         my_genome_part_size + 1);
