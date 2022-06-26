@@ -451,7 +451,7 @@ const std::vector<uint64_t> sa_word_size_param(
     // from the next node.
     uint64_t to_get = extension_size;
     for (int i = my_rank + 1; i < number_of_processes; i++) {
-        recv_counts[i] = min(to_get, how_much_x_has(i));
+        recv_counts[i] = static_cast<int>(std::min(to_get, how_much_x_has(i)));
         to_get -= recv_counts[i];
         recv_offsets[i] =
             recv_offsets[i - 1] +
