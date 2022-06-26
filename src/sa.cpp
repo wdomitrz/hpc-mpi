@@ -448,16 +448,25 @@ const std::vector<uint64_t> sa_word_size_param(
     // Create B with K_VAL-mers
 
     // Send my K_VAL first elements to the previous node and get K_VAL next
-    // from the next node. We choose K_VAL, such that it fits onto every
-    // node
-    if (my_rank > 0)
-        MPI_Isend(buffer.c_str(), static_cast<int>(extension_size), MPI_CHAR,
-                  my_rank - 1, 0, MPI_COMM_WORLD, &global_request);
-    MPI_Request get_k_request;
-    if (my_rank < number_of_processes - 1)
-        MPI_Irecv(&buffer.data()[my_genome_part_size],
-                  static_cast<int>(extension_size), MPI_CHAR, my_rank + 1,
-                  MPI_ANY_TAG, MPI_COMM_WORLD, &get_k_request);
+    // from the next node.
+    uint64_t to_get = extension_size;
+    for (int i = my_rank + 1; i < number_of_processes; i++) {
+        recv_counts[i] = min(to_get, how_much_x_has(i));
+        to_get -= recv_counts[i];
+        recv_offsets[i] =
+            recv_offsets[i - 1] +
+            recv_counts[i - 1];  // I can use i - 1, as i = my_rank
+                                 // + 1, so always i > 0
+    }
+    MPI_Alltoall(recv_counts.data(), 1, MPI_INT, send_counts.data(), 1, MPI_INT,
+                 MPI_COMM_WORLD);
+    send_offsets[0] = 0;
+    for (int i = 1; i < number_of_processes; i++)
+        send_offsets[i] = send_offsets[i - 1] + send_counts[i - 1];
+    MPI_Alltoallv(buffer.data(), send_counts.data(), send_offsets.data(),
+                  MPI_CHAR, &buffer.data()[my_genome_part_size],
+                  recv_counts.data(), recv_offsets.data(), MPI_CHAR,
+                  MPI_COMM_WORLD);
 
     uint64_t M = 1;
     uint64_t current_value = 0;
@@ -465,8 +474,6 @@ const std::vector<uint64_t> sa_word_size_param(
     for (uint64_t i = 0; i < K_VAL; i++) {
         current_value *= (1 << char_size);
         if (i < buffer.size()) {
-            if (i == my_genome_part_size && my_genome_offset + i < genome_size)
-                MPI_Wait(&get_k_request, &global_status);
             current_value += char_to_word(buffer[i]);
         }
         if (i > 0) M *= (1 << char_size);
@@ -479,8 +486,6 @@ const std::vector<uint64_t> sa_word_size_param(
         current_value *= (1 << char_size);
         const size_t j = i + K_VAL;
         if (j < buffer.size()) {
-            if (j == my_genome_part_size && my_genome_offset + j < genome_size)
-                MPI_Wait(&get_k_request, &global_status);
             current_value += char_to_word(buffer[j]);
         }
     }
