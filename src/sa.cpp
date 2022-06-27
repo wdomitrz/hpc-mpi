@@ -450,6 +450,7 @@ const std::vector<uint64_t> sa_word_size_param(
     // Send my K_VAL first elements to the previous node and get K_VAL next
     // from the next node.
     uint64_t to_get = extension_size;
+    recv_counts[my_rank] = static_cast<int>(my_genome_part_size);
     for (int i = my_rank + 1; i < number_of_processes; i++) {
         recv_counts[i] = static_cast<int>(std::min(to_get, how_much_x_has(i)));
         to_get -= recv_counts[i];
@@ -460,13 +461,9 @@ const std::vector<uint64_t> sa_word_size_param(
     }
     MPI_Alltoall(recv_counts.data(), 1, MPI_INT, send_counts.data(), 1, MPI_INT,
                  MPI_COMM_WORLD);
-    send_offsets[0] = 0;
-    for (int i = 1; i < number_of_processes; i++)
-        send_offsets[i] = send_offsets[i - 1] + send_counts[i - 1];
     MPI_Alltoallv(buffer.data(), send_counts.data(), send_offsets.data(),
-                  MPI_CHAR, &buffer.data()[my_genome_part_size],
-                  recv_counts.data(), recv_offsets.data(), MPI_CHAR,
-                  MPI_COMM_WORLD);
+                  MPI_CHAR, buffer.data(), recv_counts.data(),
+                  recv_offsets.data(), MPI_CHAR, MPI_COMM_WORLD);
 
     uint64_t M = 1;
     uint64_t current_value = 0;
