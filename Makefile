@@ -36,5 +36,5 @@ sa_seq.o: src/sa_seq.cpp src/sa.hpp src/data_source.h Makefile
 clean:
 	rm -f src/*.o *.o genome_index genome_index_seq genome_index_v1 genome_index_v2
 
-report.pdf: report.md
+report.pdf: README.md
 	pandoc $^ -o $@
